@@ -1,0 +1,6 @@
+{
+  "name": "DayFlow",
+  "description": "A native Android personal reminder, recurring task planner, and daily agenda app with reliable local notifications and offline SQLite persistence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

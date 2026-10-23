@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Subtle inner halo circle -->
+    <path
+        android:fillColor="#1A38BDF8"
+        android:pathData="M54,24A30,30 0,1 1,24 54A30,30 0,0 1,54 24Z" />
+    <!-- Bold calendar & check silhouette in warm amber/gold and crisp white -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M37,30h6v6h22v-6h6v6h4c3.3,0 6,2.7 6,6v32c0,3.3 -2.7,6 -6,6H33c-3.3,0 -6,-2.7 -6,-6V42c0,-3.3 2.7,-6 6,-6h4v-6zM33,48v26h42V48H33z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M49.5,67.5L40,58l4.2,-4.2l5.3,5.3l14.3,-14.3L68,49L49.5,67.5z" />
+</vector>
