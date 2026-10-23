@@ -1,10 +1,11 @@
 package com.example.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import android.media.RingtoneManager
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -17,17 +18,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -37,10 +42,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,6 +56,7 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,8 +64,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -72,17 +79,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneOffset
-
-private val ColorPaletteHex = listOf(
-    "#0A6670", // Deep Teal
-    "#4338CA", // Indigo
-    "#10B981", // Emerald
-    "#D97706", // Amber
-    "#EC4899", // Pink
-    "#8B5CF6", // Violet
-    "#E11D48", // Rose Red
-    "#0284C7"  // Sky Blue
-)
 
 private val AdvanceAlertOptions = listOf(
     0 to "On time",
@@ -111,7 +107,6 @@ fun ReminderEditorSheet(
     var localDateStr by remember(initialReminder) { mutableStateOf(initialReminder.localDateStr) }
     var localTimeStr by remember(initialReminder) { mutableStateOf(initialReminder.localTimeStr) }
     var category by remember(initialReminder) { mutableStateOf(initialReminder.category) }
-    var colorHex by remember(initialReminder) { mutableStateOf(initialReminder.colorHex) }
     var priority by remember(initialReminder) { mutableStateOf(initialReminder.priority) }
     var recurrenceType by remember(initialReminder) { mutableStateOf(initialReminder.recurrenceType) }
     var recurrenceInterval by remember(initialReminder) {
@@ -136,12 +131,43 @@ fun ReminderEditorSheet(
     var notificationEnabled by remember(initialReminder) {
         mutableStateOf(initialReminder.notificationEnabled)
     }
+    var isRingingAlarm by remember(initialReminder) {
+        mutableStateOf(initialReminder.isRingingAlarm)
+    }
+    var alarmVibration by remember(initialReminder) {
+        mutableStateOf(initialReminder.alarmVibration)
+    }
+    var snoozeDurationMinutes by remember(initialReminder) {
+        mutableIntStateOf(initialReminder.snoozeDurationMinutes)
+    }
     var selectedAdvanceOffsets by remember(initialReminder) {
         mutableStateOf(initialReminder.parsedAdvanceOffsets().toSet())
     }
     var editScope by remember(initialReminder) {
         mutableStateOf(RecurringEditScope.THIS_OCCURRENCE_ONLY)
     }
+
+    // Audio Preview Player
+    val context = LocalContext.current
+    var isPreviewPlaying by remember { mutableStateOf(false) }
+    var previewPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                previewPlayer?.let {
+                    if (it.isPlaying) it.stop()
+                    it.release()
+                }
+            } catch (_: Exception) {}
+            previewPlayer = null
+            isPreviewPlaying = false
+        }
+    }
+
+    // Lightweight Accordion States
+    var isRecurrenceExpanded by remember { mutableStateOf(initialReminder.isRecurring) }
+    var isAlertsExpanded by remember { mutableStateOf(false) }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -160,344 +186,7 @@ fun ReminderEditorSheet(
                 .navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (isEditingExisting) "Edit Reminder" else "New Reminder",
-                    style = MaterialTheme.typography.headlineMedium
-                )
-                if (isEditingExisting) {
-                    TextButton(
-                        onClick = { showDeleteConfirmDialog = true },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        ),
-                        modifier = Modifier.testTag("editor_delete_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "Delete reminder",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Delete")
-                    }
-                }
-            }
-
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text("Title *") },
-                placeholder = { Text("e.g., Take vitamin D, Submit project report") },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("editor_title_input")
-            )
-
-            OutlinedTextField(
-                value = description,
-                onValueChange = { description = it },
-                label = { Text("Notes / Description (optional)") },
-                placeholder = { Text("Add checklist items, links, or context...") },
-                minLines = 2,
-                maxLines = 4,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("editor_description_input")
-            )
-
-            // Date & Time Selection Section
-            Text(
-                text = "Date & Scheduled Time",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { showDatePicker = true },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("editor_date_picker_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CalendarMonth,
-                        contentDescription = "Pick Date",
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(DateTimeUtils.formatFriendlyDate(localDateStr))
-                }
-
-                OutlinedButton(
-                    onClick = { showTimePicker = true },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("editor_time_picker_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AccessTime,
-                        contentDescription = "Pick Time",
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(DateTimeUtils.formatDisplayTime(localTimeStr, use24Hour))
-                }
-            }
-
-            // Quick Date & Time Presets
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                val today = LocalDate.now()
-                listOf(
-                    "Today" to DateTimeUtils.formatLocalDate(today),
-                    "Tomorrow" to DateTimeUtils.formatLocalDate(today.plusDays(1)),
-                    "In 3 Days" to DateTimeUtils.formatLocalDate(today.plusDays(3)),
-                    "Next Week" to DateTimeUtils.formatLocalDate(today.plusWeeks(1))
-                ).forEach { (label, dateVal) ->
-                    FilterChip(
-                        selected = localDateStr == dateVal,
-                        onClick = { localDateStr = dateVal },
-                        label = { Text(label) }
-                    )
-                }
-                listOf("09:00", "12:30", "17:00", "20:00").forEach { presetTime ->
-                    FilterChip(
-                        selected = localTimeStr == presetTime,
-                        onClick = { localTimeStr = presetTime },
-                        label = { Text(DateTimeUtils.formatDisplayTime(presetTime, use24Hour)) }
-                    )
-                }
-            }
-
-            HorizontalDivider()
-
-            // Priority Selection
-            Text(
-                text = "Priority Level",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                ReminderPriority.entries.forEach { prio ->
-                    val selected = priority == prio
-                    FilterChip(
-                        selected = selected,
-                        onClick = { priority = prio },
-                        label = { Text(prio.label) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("priority_chip_${prio.name.lowercase()}")
-                    )
-                }
-            }
-
-            // Category & Color Swatch
-            Text(
-                text = "Category & Accent Color",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ReminderCategory.entries.forEach { cat ->
-                    FilterChip(
-                        selected = category == cat,
-                        onClick = {
-                            category = cat
-                            colorHex = cat.defaultColorHex
-                        },
-                        label = { Text(cat.label) },
-                        modifier = Modifier.testTag("category_chip_${cat.name.lowercase()}")
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                ColorPaletteHex.forEach { hex ->
-                    val swatchColor = parseHexColor(hex)
-                    val isSelected = colorHex.equals(hex, ignoreCase = true)
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(swatchColor)
-                            .border(
-                                width = if (isSelected) 3.dp else 1.dp,
-                                color = if (isSelected) {
-                                    MaterialTheme.colorScheme.onSurface
-                                } else {
-                                     Color.Transparent
-                                },
-                                shape = CircleShape
-                            )
-                            .clickable { colorHex = hex },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (isSelected) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Selected color",
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            HorizontalDivider()
-
-            // Recurrence Section
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Repeat,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Recurrence Schedule",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                RecurrenceType.entries.forEach { type ->
-                    FilterChip(
-                        selected = recurrenceType == type,
-                        onClick = { recurrenceType = type },
-                        label = { Text(type.label) },
-                        modifier = Modifier.testTag("recurrence_chip_${type.name.lowercase()}")
-                    )
-                }
-            }
-
-            if (recurrenceType == RecurrenceType.SELECTED_WEEKDAYS) {
-                val dayLabels = listOf(
-                    1 to "Mon",
-                    2 to "Tue",
-                    3 to "Wed",
-                    4 to "Thu",
-                    5 to "Fri",
-                    6 to "Sat",
-                    7 to "Sun"
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    dayLabels.forEach { (dayNum, label) ->
-                        val isDaySelected = dayNum in selectedWeekdays
-                        FilterChip(
-                            selected = isDaySelected,
-                            onClick = {
-                                selectedWeekdays = if (isDaySelected && selectedWeekdays.size > 1) {
-                                    selectedWeekdays - dayNum
-                                } else {
-                                    selectedWeekdays + dayNum
-                                }
-                            },
-                            label = { Text(label) }
-                        )
-                    }
-                }
-            }
-
-            if (recurrenceType in setOf(
-                    RecurrenceType.CUSTOM_DAYS,
-                    RecurrenceType.WEEKLY,
-                    RecurrenceType.MONTHLY
-                )
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("Repeat every:", style = MaterialTheme.typography.bodyMedium)
-                    listOf(1, 2, 3, 5, 7, 14).forEach { intervalVal ->
-                        FilterChip(
-                            selected = recurrenceInterval == intervalVal,
-                            onClick = { recurrenceInterval = intervalVal },
-                            label = { Text("$intervalVal") }
-                        )
-                    }
-                }
-            }
-
-            if (recurrenceType != RecurrenceType.NONE) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedTextField(
-                        value = recurrenceEndDate,
-                        onValueChange = { recurrenceEndDate = it.trim() },
-                        label = { Text("End Date (YYYY-MM-DD)") },
-                        placeholder = { Text("Optional") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = recurrenceMaxOccurrencesText,
-                        onValueChange = {
-                            recurrenceMaxOccurrencesText = it.filter { ch -> ch.isDigit() }
-                        },
-                        label = { Text("Max Occurrences") },
-                        placeholder = { Text("Unlimited") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Pause Recurring Schedule", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            "Temporarily stop notifications and auto-advancement",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = isRecurrencePaused,
-                        onCheckedChange = { isRecurrencePaused = it }
-                    )
-                }
-            }
-
-            HorizontalDivider()
-
-            // Notifications & Multiple Advance Alerts
+            // Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -507,151 +196,568 @@ fun ReminderEditorSheet(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.NotificationsActive,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                    Text(
+                        text = if (isEditingExisting) "Edit Task" else "New Task",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
                     )
-                    Column {
-                        Text(
-                            text = "Native Android Notification",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "Fires via AlarmManager even when app is closed",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                }
+
+                if (isEditingExisting) {
+                    IconButton(
+                        onClick = { showDeleteConfirmDialog = true },
+                        modifier = Modifier.testTag("editor_delete_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "Delete Task",
+                            tint = MaterialTheme.colorScheme.error
                         )
                     }
                 }
-                Switch(
-                    checked = notificationEnabled,
-                    onCheckedChange = { notificationEnabled = it },
-                    modifier = Modifier.testTag("editor_notification_switch")
-                )
             }
 
-            if (notificationEnabled) {
+            // 1. Task Title & Notes
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("Task Title *") },
+                placeholder = { Text("What do you want to accomplish?") },
+                singleLine = true,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("editor_title_input")
+            )
+
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text("Notes (optional)") },
+                placeholder = { Text("Add extra details...") },
+                maxLines = 3,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("editor_description_input")
+            )
+
+            // 2. Primary Date & Time Selector Chips
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { showDatePicker = true },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("editor_date_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CalendarMonth,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = DateTimeUtils.formatFriendlyDate(localDateStr),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = { showTimePicker = true },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("editor_time_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AccessTime,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = DateTimeUtils.formatDisplayTime(localTimeStr, use24Hour),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            // 3. Priority Selection
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "Alert Timing (select one or multiple):",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "Priority",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ReminderPriority.entries.forEach { prio ->
+                        FilterChip(
+                            selected = priority == prio,
+                            onClick = { priority = prio },
+                            label = { Text(prio.label) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("editor_priority_${prio.name.lowercase()}")
+                        )
+                    }
+                }
+            }
+
+            // 4. Category Selection
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "Category",
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    AdvanceAlertOptions.forEach { (offsetMin, label) ->
-                        val isSelected = offsetMin in selectedAdvanceOffsets
+                    ReminderCategory.entries.forEach { cat ->
                         FilterChip(
-                            selected = isSelected,
-                            onClick = {
-                                selectedAdvanceOffsets = if (isSelected && selectedAdvanceOffsets.size > 1) {
-                                    selectedAdvanceOffsets - offsetMin
-                                } else {
-                                    selectedAdvanceOffsets + offsetMin
-                                }
-                            },
-                            label = { Text(label) }
+                            selected = category == cat,
+                            onClick = { category = cat },
+                            label = { Text(cat.label) },
+                            modifier = Modifier.testTag("editor_cat_${cat.name.lowercase()}")
                         )
                     }
                 }
             }
 
-            // If editing an existing recurring reminder, choose occurrence vs series scope
-            if (isEditingExisting && initialReminder.isRecurring) {
-                HorizontalDivider()
-                Text(
-                    text = "Apply Changes To:",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
+            HorizontalDivider()
+
+            // 5. Expandable Accordion: Repeat Schedule
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isRecurrenceExpanded = !isRecurrenceExpanded }
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilterChip(
-                        selected = editScope == RecurringEditScope.THIS_OCCURRENCE_ONLY,
-                        onClick = { editScope = RecurringEditScope.THIS_OCCURRENCE_ONLY },
-                        label = { Text("This Occurrence Only") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = editScope == RecurringEditScope.ENTIRE_SERIES,
-                        onClick = { editScope = RecurringEditScope.ENTIRE_SERIES },
-                        label = { Text("Entire Series") },
-                        modifier = Modifier.weight(1f)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Repeat,
+                            contentDescription = null,
+                            tint = if (recurrenceType != RecurrenceType.NONE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Repeat Schedule",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = recurrenceType.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = if (isRecurrenceExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onDismiss,
+            AnimatedVisibility(visible = isRecurrenceExpanded) {
+                Column(
                     modifier = Modifier
-                        .weight(1f)
-                        .testTag("editor_cancel_button")
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text("Cancel")
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        RecurrenceType.entries.forEach { rType ->
+                            FilterChip(
+                                selected = recurrenceType == rType,
+                                onClick = { recurrenceType = rType },
+                                label = { Text(rType.label) },
+                                modifier = Modifier.testTag("editor_recurrence_${rType.name.lowercase()}")
+                            )
+                        }
+                    }
+
+                    if (recurrenceType == RecurrenceType.SELECTED_WEEKDAYS) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            listOf("M" to 1, "T" to 2, "W" to 3, "T" to 4, "F" to 5, "S" to 6, "S" to 7).forEach { (dayLabel, dayVal) ->
+                                val isSelected = selectedWeekdays.contains(dayVal)
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = {
+                                        selectedWeekdays = if (isSelected) {
+                                            if (selectedWeekdays.size > 1) selectedWeekdays - dayVal else selectedWeekdays
+                                        } else {
+                                            selectedWeekdays + dayVal
+                                        }
+                                    },
+                                    label = { Text(dayLabel) }
+                                )
+                            }
+                        }
+                    }
+
+                    if (isEditingExisting && recurrenceType != RecurrenceType.NONE) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Pause recurring series", style = MaterialTheme.typography.bodyMedium)
+                            Switch(
+                                checked = isRecurrencePaused,
+                                onCheckedChange = { isRecurrencePaused = it }
+                            )
+                        }
+                    }
                 }
-                Button(
-                    onClick = {
-                        val updatedEntity = initialReminder.copy(
+            }
+
+            // 6. Expandable Accordion: Notifications & Advance Alerts
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isAlertsExpanded = !isAlertsExpanded }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.NotificationsActive,
+                            contentDescription = null,
+                            tint = if (notificationEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Notifications & Advance Alerts",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = if (notificationEnabled) "${selectedAdvanceOffsets.size} alert(s) enabled" else "Muted",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = if (isAlertsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            AnimatedVisibility(visible = isAlertsExpanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Enable Notification Alerts", style = MaterialTheme.typography.bodyMedium)
+                        Switch(
+                            checked = notificationEnabled,
+                            onCheckedChange = { notificationEnabled = it },
+                            modifier = Modifier.testTag("editor_notif_switch")
+                        )
+                    }
+
+                    // Ringing Clock Alarm Toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Alarm,
+                                    contentDescription = null,
+                                    tint = if (isRingingAlarm) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text("Ringing Clock Alarm", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            }
+                            Text(
+                                text = "Plays loud ringtone & shows full-screen alarm over lock screen",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isRingingAlarm,
+                            onCheckedChange = { isRingingAlarm = it },
+                            modifier = Modifier.testTag("editor_ringing_alarm_switch")
+                        )
+                    }
+
+                    // Sound Preview & Snooze Controls (when Ringing Alarm enabled)
+                    if (isRingingAlarm) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text("Alarm Sound", style = MaterialTheme.typography.labelLarge)
+                                        Text("Default Android Ringtone", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            if (isPreviewPlaying) {
+                                                previewPlayer?.let {
+                                                    if (it.isPlaying) it.stop()
+                                                    it.release()
+                                                }
+                                                previewPlayer = null
+                                                isPreviewPlaying = false
+                                            } else {
+                                                try {
+                                                    val alarmUri = RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_ALARM)
+                                                        ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                                                    previewPlayer = MediaPlayer().apply {
+                                                        setAudioAttributes(
+                                                            AudioAttributes.Builder()
+                                                                .setUsage(AudioAttributes.USAGE_ALARM)
+                                                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                                                .build()
+                                                        )
+                                                        setDataSource(context, alarmUri)
+                                                        prepare()
+                                                        start()
+                                                    }
+                                                    isPreviewPlaying = true
+                                                } catch (_: Exception) {}
+                                            }
+                                        },
+                                        modifier = Modifier.testTag("preview_alarm_sound_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isPreviewPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(if (isPreviewPlaying) "Stop" else "Preview")
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Snooze Duration", style = MaterialTheme.typography.bodyMedium)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        listOf(5, 10, 15).forEach { mins ->
+                                            FilterChip(
+                                                selected = snoozeDurationMinutes == mins,
+                                                onClick = { snoozeDurationMinutes = mins },
+                                                label = { Text("$mins m") },
+                                                modifier = Modifier.testTag("snooze_chip_${mins}m")
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Vibrate during alarm", style = MaterialTheme.typography.bodyMedium)
+                                    Switch(
+                                        checked = alarmVibration,
+                                        onCheckedChange = { alarmVibration = it }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (notificationEnabled) {
+                        Text(
+                            text = "Remind me in advance:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            AdvanceAlertOptions.forEach { (offsetMins, label) ->
+                                val isSelected = selectedAdvanceOffsets.contains(offsetMins)
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = {
+                                        selectedAdvanceOffsets = if (isSelected) {
+                                            if (selectedAdvanceOffsets.size > 1) selectedAdvanceOffsets - offsetMins else selectedAdvanceOffsets
+                                        } else {
+                                            selectedAdvanceOffsets + offsetMins
+                                        }
+                                    },
+                                    label = { Text(label) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Recurring Edit Scope Option (if editing an existing recurring series)
+            if (isEditingExisting && initialReminder.isRecurring) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Apply edits to:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = editScope == RecurringEditScope.THIS_OCCURRENCE_ONLY,
+                            onClick = { editScope = RecurringEditScope.THIS_OCCURRENCE_ONLY },
+                            label = { Text("This task only") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = editScope == RecurringEditScope.ENTIRE_SERIES,
+                            onClick = { editScope = RecurringEditScope.ENTIRE_SERIES },
+                            label = { Text("Entire series") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // 7. Save Action Button
+            Button(
+                onClick = {
+                    if (title.isNotBlank()) {
+                        val computedEpoch = DateTimeUtils.computeEpochMillis(localDateStr, localTimeStr)
+                        val advanceStr = selectedAdvanceOffsets.sorted().joinToString(",")
+                        val weekdaysStr = selectedWeekdays.sorted().joinToString(",")
+                        val maxOccur = recurrenceMaxOccurrencesText.toIntOrNull()
+
+                        val updated = initialReminder.copy(
                             title = title.trim(),
                             description = description.trim(),
                             localDateStr = localDateStr,
                             localTimeStr = localTimeStr,
+                            scheduledEpochMillis = computedEpoch,
                             category = category,
-                            colorHex = colorHex,
                             priority = priority,
                             recurrenceType = recurrenceType,
-                            recurrenceInterval = recurrenceInterval.coerceAtLeast(1),
-                            recurrenceWeekdays = selectedWeekdays.sorted().joinToString(","),
-                            recurrenceEndDate = recurrenceEndDate.takeIf { it.isNotBlank() },
-                            recurrenceMaxOccurrences = recurrenceMaxOccurrencesText.toIntOrNull(),
+                            recurrenceInterval = recurrenceInterval,
+                            recurrenceWeekdays = weekdaysStr,
+                            recurrenceEndDate = recurrenceEndDate.ifBlank { null },
+                            recurrenceMaxOccurrences = maxOccur,
                             isRecurrencePaused = isRecurrencePaused,
                             notificationEnabled = notificationEnabled,
-                            advanceAlertOffsetsMinutes = selectedAdvanceOffsets.sorted().joinToString(",")
+                            isRingingAlarm = isRingingAlarm,
+                            alarmVibration = alarmVibration,
+                            snoozeDurationMinutes = snoozeDurationMinutes,
+                            advanceAlertOffsetsMinutes = advanceStr
                         )
-                        onSave(updatedEntity, editScope)
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("editor_save_button")
-                ) {
-                    Text(if (isEditingExisting) "Save Changes" else "Create Reminder")
-                }
+                        onSave(updated, editScope)
+                    }
+                },
+                enabled = title.isNotBlank(),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testTag("editor_save_button")
+            ) {
+                Text(if (isEditingExisting) "Save Changes" else "Create Task")
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 
+    // Material 3 DatePickerDialog
     if (showDatePicker) {
-        val currentLocalDate = DateTimeUtils.parseLocalDate(localDateStr)
-        val initialMillis = currentLocalDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = DateTimeUtils.parseLocalDate(localDateStr)
+                .atStartOfDay(ZoneOffset.UTC)
+                .toInstant()
+                .toEpochMilli()
+        )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val millis = datePickerState.selectedDateMillis
-                        if (millis != null) {
-                            val picked = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
-                            localDateStr = DateTimeUtils.formatLocalDate(picked)
+                        val selectedEpoch = datePickerState.selectedDateMillis
+                        if (selectedEpoch != null) {
+                            val pickedDate = Instant.ofEpochMilli(selectedEpoch)
+                                .atZone(ZoneOffset.UTC)
+                                .toLocalDate()
+                            localDateStr = DateTimeUtils.formatLocalDate(pickedDate)
                         }
                         showDatePicker = false
                     }
                 ) {
-                    Text("Confirm")
+                    Text("OK")
                 }
             },
             dismissButton = {
@@ -664,84 +770,76 @@ fun ReminderEditorSheet(
         }
     }
 
+    // Material 3 TimePickerDialog
     if (showTimePicker) {
-        val currentLocalTime = DateTimeUtils.parseLocalTime(localTimeStr)
+        val parsedTime = DateTimeUtils.parseLocalTime(localTimeStr)
         val timePickerState = rememberTimePickerState(
-            initialHour = currentLocalTime.hour,
-            initialMinute = currentLocalTime.minute,
+            initialHour = parsedTime.hour,
+            initialMinute = parsedTime.minute,
             is24Hour = use24Hour
         )
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
-            title = { Text("Select Reminder Time") },
-            text = {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    TimePicker(state = timePickerState)
-                }
-            },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val pickedTime = LocalTime.of(timePickerState.hour, timePickerState.minute)
-                        localTimeStr = DateTimeUtils.formatLocalTime(pickedTime)
+                        localTimeStr = String.format(java.util.Locale.US, "%02d:%02d", timePickerState.hour, timePickerState.minute)
                         showTimePicker = false
                     }
                 ) {
-                    Text("Confirm")
+                    Text("OK")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showTimePicker = false }) {
                     Text("Cancel")
                 }
+            },
+            text = {
+                TimePicker(state = timePickerState)
             }
         )
     }
 
+    // Delete Confirmation Dialog
     if (showDeleteConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
-            title = { Text("Delete Reminder?") },
+            title = { Text("Delete Task") },
             text = {
                 Text(
                     if (initialReminder.isRecurring) {
-                        "This is a recurring reminder. Would you like to delete only this occurrence or the entire recurring series?"
+                        "Do you want to delete only this occurrence or the entire recurring series?"
                     } else {
-                        "Are you sure you want to permanently delete \"${initialReminder.title}\"? Any scheduled notifications will be cancelled."
+                        "Are you sure you want to delete this task? This action cannot be undone."
                     }
                 )
             },
             confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (initialReminder.isRecurring) {
-                        TextButton(
-                            onClick = {
-                                showDeleteConfirmDialog = false
-                                onDelete(initialReminder, true)
-                            },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
-                            Text("Entire Series")
-                        }
-                    }
-                    Button(
-                        onClick = {
-                            showDeleteConfirmDialog = false
-                            onDelete(initialReminder, false)
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Text(if (initialReminder.isRecurring) "This Occurrence" else "Delete")
-                    }
+                Button(
+                    onClick = {
+                        showDeleteConfirmDialog = false
+                        onDelete(initialReminder, false)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(if (initialReminder.isRecurring) "Delete This Task" else "Delete")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirmDialog = false }) {
-                    Text("Cancel")
+                if (initialReminder.isRecurring) {
+                    TextButton(
+                        onClick = {
+                            showDeleteConfirmDialog = false
+                            onDelete(initialReminder, true)
+                        }
+                    ) {
+                        Text("Delete Entire Series", color = MaterialTheme.colorScheme.error)
+                    }
+                } else {
+                    TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                        Text("Cancel")
+                    }
                 }
             }
         )

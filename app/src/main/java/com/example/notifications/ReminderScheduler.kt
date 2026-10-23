@@ -55,6 +55,7 @@ class ReminderScheduler(private val context: Context) {
         const val EXTRA_REMINDER_ID = "extra_reminder_id"
         const val EXTRA_OFFSET_MINUTES = "extra_offset_minutes"
         const val EXTRA_SNOOZE_MINUTES = "extra_snooze_minutes"
+        const val EXTRA_IS_RINGING_ALARM = "extra_is_ringing_alarm"
         const val EXTRA_IS_TEST = "extra_is_test"
 
         private const val MAX_OFFSET_SLOTS = 10
@@ -140,7 +141,8 @@ class ReminderScheduler(private val context: Context) {
                 reminderId = reminder.id,
                 slotIndex = 0,
                 triggerAtMillis = snoozedUntil,
-                offsetMinutes = 0
+                offsetMinutes = 0,
+                isRingingAlarm = reminder.isRingingAlarm
             )
             scheduledCount++
             return scheduledCount
@@ -156,7 +158,8 @@ class ReminderScheduler(private val context: Context) {
                     reminderId = reminder.id,
                     slotIndex = index,
                     triggerAtMillis = safeTriggerAt,
-                    offsetMinutes = offsetMin
+                    offsetMinutes = offsetMin,
+                    isRingingAlarm = if (offsetMin == 0) reminder.isRingingAlarm else false
                 )
                 scheduledCount++
             }
@@ -169,12 +172,14 @@ class ReminderScheduler(private val context: Context) {
         reminderId: Long,
         slotIndex: Int,
         triggerAtMillis: Long,
-        offsetMinutes: Int
+        offsetMinutes: Int,
+        isRingingAlarm: Boolean = false
     ) {
         val intent = Intent(context, ReminderAlarmReceiver::class.java).apply {
             action = ACTION_FIRE_REMINDER
             putExtra(EXTRA_REMINDER_ID, reminderId)
             putExtra(EXTRA_OFFSET_MINUTES, offsetMinutes)
+            putExtra(EXTRA_IS_RINGING_ALARM, isRingingAlarm)
         }
         val requestCode = computeRequestCode(reminderId, slotIndex)
         val pendingIntent = PendingIntent.getBroadcast(
@@ -185,7 +190,19 @@ class ReminderScheduler(private val context: Context) {
         )
 
         try {
-            if (canScheduleExactAlarms()) {
+            if (isRingingAlarm && offsetMinutes == 0) {
+                val showIntent = Intent(context, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                val showPendingIntent = PendingIntent.getActivity(
+                    context,
+                    requestCode + 50000,
+                    showIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val clockInfo = AlarmManager.AlarmClockInfo(triggerAtMillis, showPendingIntent)
+                am.setAlarmClock(clockInfo, pendingIntent)
+            } else if (canScheduleExactAlarms()) {
                 am.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
                     triggerAtMillis,
@@ -212,6 +229,15 @@ class ReminderScheduler(private val context: Context) {
      * Cancels all scheduled PendingIntents for [reminderId] and dismisses any visible notification.
      */
     fun cancelReminderAlarms(reminderId: Long) {
+        if (AlarmService.isRinging && AlarmService.activeReminderId == reminderId) {
+            try {
+                val stopServiceIntent = Intent(context, AlarmService::class.java).apply {
+                    action = AlarmService.ACTION_STOP_ALARM
+                }
+                context.startService(stopServiceIntent)
+            } catch (_: Exception) {}
+        }
+
         val am = alarmManager
         if (am != null) {
             for (slot in 0 until MAX_OFFSET_SLOTS) {

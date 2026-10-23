@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AlarmOn
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.CheckCircle
@@ -37,13 +39,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -78,6 +78,7 @@ fun SettingsAndDiagnosticsScreen(
     diagnostics: NotificationDiagnostics?,
     onRequestNotificationPermission: () -> Unit,
     onSendTestNotification: () -> Unit,
+    onTriggerTestRingingAlarm: () -> Unit = {},
     onReconcileAlarms: () -> Unit,
     onOpenDiagnosticsModal: () -> Unit,
     onOpenJsonBackupDialog: () -> Unit,
@@ -109,7 +110,7 @@ fun SettingsAndDiagnosticsScreen(
                 style = MaterialTheme.typography.headlineMedium
             )
             Text(
-                text = "Configure native notifications, preferences, and offline database backups.",
+                text = "Manage notifications, theme preferences, and full JSON backups.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -143,17 +144,98 @@ fun SettingsAndDiagnosticsScreen(
                     }
                 },
                 onSendTestNotification = onSendTestNotification,
+                onTriggerTestRingingAlarm = onTriggerTestRingingAlarm,
                 onReconcileAlarms = onReconcileAlarms,
                 onOpenFullDiagnostics = onOpenDiagnosticsModal
             )
         }
 
-        // 2. Appearance & Regional Formatting
+        // 2. Data Export & Import (Reminders + Settings JSON Backup)
         item {
             Card(
-                shape = MaterialTheme.shapes.large,
+                shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Code,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column {
+                            Text(
+                                text = "Data Export & Import (JSON Backup)",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = "Export or restore all reminders, tasks, and user settings",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Your DayFlow backup file (.json) includes all one-time and recurring reminders, task history, and app settings so you can back up or migrate devices offline.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = onExportJsonToFile,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("export_json_file_button")
+                        ) {
+                            Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Export JSON")
+                        }
+                        OutlinedButton(
+                            onClick = onImportJsonFromFile,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("import_json_file_button")
+                        ) {
+                            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Import File")
+                        }
+                    }
+
+                    FilledTonalButton(
+                        onClick = onOpenJsonBackupDialog,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("open_json_inspector_button")
+                    ) {
+                        Text("Inspect / Copy / Paste JSON Backup")
+                    }
+                }
+            }
+        }
+
+        // 3. Appearance & Regional Formatting
+        item {
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -193,7 +275,7 @@ fun SettingsAndDiagnosticsScreen(
                         }
                     }
 
-                    HorizontalDivider()
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -238,12 +320,13 @@ fun SettingsAndDiagnosticsScreen(
             }
         }
 
-        // 3. Default Reminder Behavior & Alert Sound/Vibration
+        // 4. Default Reminder Behavior & Alert Sound/Vibration
         item {
             Card(
-                shape = MaterialTheme.shapes.large,
+                shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -261,7 +344,7 @@ fun SettingsAndDiagnosticsScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Default Reminder Behavior",
+                            text = "Default Reminder & Notification Preferences",
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
@@ -310,7 +393,7 @@ fun SettingsAndDiagnosticsScreen(
                         }
                     }
 
-                    HorizontalDivider()
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -353,83 +436,13 @@ fun SettingsAndDiagnosticsScreen(
             }
         }
 
-        // 4. Local SQLite Database Export & Import (JSON)
-        item {
-            Card(
-                shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Code,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "Offline Database Backup & Restore (JSON)",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                    Text(
-                        text = "All reminders are stored locally in an encrypted-ready Room SQLite database. Export or import your reminders as portable JSON anytime without an account.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onExportJsonToFile,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("export_json_file_button")
-                        ) {
-                            Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Save File")
-                        }
-                        OutlinedButton(
-                            onClick = onImportJsonFromFile,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("import_json_file_button")
-                        ) {
-                            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Load File")
-                        }
-                    }
-
-                    FilledTonalButton(
-                        onClick = onOpenJsonBackupDialog,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("open_json_inspector_button")
-                    ) {
-                        Text("Inspect / Copy / Paste Raw JSON Backup")
-                    }
-                }
-            }
-        }
-
         // 5. About DayFlow & Onboarding Guide
         item {
             Card(
-                shape = MaterialTheme.shapes.large,
+                shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -453,12 +466,12 @@ fun SettingsAndDiagnosticsScreen(
                     }
 
                     Text(
-                        text = "Version 1.0.0 • Native Android (Kotlin + Jetpack Compose + Room SQLite + AlarmManager)",
+                        text = "Version 1.0.0 • Native Android (Kotlin + Jetpack Compose M3 + Room SQLite + AlarmManager)",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "DayFlow schedules native RTC_WAKEUP alarms with boot recovery (BOOT_COMPLETED) and automatic timezone/DST reconciliation. Please note: Android OS power management, Doze mode, denied permissions, or manually choosing 'Force Stop' in system settings can delay or prevent alarms until the app is reopened.",
+                        text = "DayFlow schedules native RTC_WAKEUP alarms with boot recovery (BOOT_COMPLETED) and automatic timezone/DST reconciliation. Android OS power management, Doze mode, denied permissions, or manually choosing 'Force Stop' in system settings can delay or prevent alarms until the app is reopened.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -492,13 +505,15 @@ private fun NotificationDiagnosticsCard(
     onOpenExactAlarmSettings: () -> Unit,
     onOpenSystemNotificationSettings: () -> Unit,
     onSendTestNotification: () -> Unit,
+    onTriggerTestRingingAlarm: () -> Unit = {},
     onReconcileAlarms: () -> Unit,
     onOpenFullDiagnostics: () -> Unit
 ) {
     Card(
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
@@ -513,7 +528,8 @@ private fun NotificationDiagnosticsCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
                     Icon(
                         imageVector = Icons.Default.NotificationsActive,
@@ -532,8 +548,17 @@ private fun NotificationDiagnosticsCard(
                         )
                     }
                 }
-                TextButton(onClick = onOpenFullDiagnostics) {
-                    Text("Details")
+                TextButton(
+                    onClick = onOpenFullDiagnostics,
+                    modifier = Modifier.testTag("open_diagnostics_screen_button")
+                ) {
+                    Text("Full Report")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
 
@@ -584,7 +609,7 @@ private fun NotificationDiagnosticsCard(
 
                 // OEM Battery guidance banner
                 Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -627,28 +652,39 @@ private fun NotificationDiagnosticsCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                FilledTonalButton(
+                    onClick = onSendTestNotification,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("send_test_notification_button")
+                ) {
+                    Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Banner", style = MaterialTheme.typography.labelSmall)
+                }
+
+                Button(
+                    onClick = onTriggerTestRingingAlarm,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("test_ringing_alarm_button")
+                ) {
+                    Icon(Icons.Default.AlarmOn, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Test Alarm", style = MaterialTheme.typography.labelSmall)
+                }
+
                 FilledTonalButton(
                     onClick = onReconcileAlarms,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("reconcile_alarms_button")
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Reschedule All")
-                }
-
-                Button(
-                    onClick = onSendTestNotification,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("send_test_notification_button")
-                ) {
-                    Icon(Icons.Default.AlarmOn, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Test Alert")
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Reschedule", style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
@@ -696,108 +732,25 @@ private fun DiagnosticRowItem(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DiagnosticsModalSheet(
-    diagnostics: NotificationDiagnostics?,
-    onDismiss: () -> Unit,
-    onRequestPermission: () -> Unit,
-    onSendTest: () -> Unit,
-    onReconcile: () -> Unit
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "Native Notification Diagnostics",
-                style = MaterialTheme.typography.headlineMedium
-            )
-            Text(
-                text = "DayFlow uses Android's native AlarmManager and BroadcastReceivers rather than web timers or background polling.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            if (diagnostics != null) {
-                DiagnosticRowItem(
-                    label = "POST_NOTIFICATIONS Permission",
-                    isHealthy = diagnostics.postNotificationsGranted,
-                    statusText = if (diagnostics.postNotificationsGranted) "Granted" else "Not Granted",
-                    actionLabel = if (!diagnostics.postNotificationsGranted) "Request" else null,
-                    onAction = onRequestPermission
-                )
-                DiagnosticRowItem(
-                    label = "Exact Alarm Capability (API ${diagnostics.sdkInt})",
-                    isHealthy = diagnostics.exactAlarmsAllowed,
-                    statusText = if (diagnostics.exactAlarmsAllowed) {
-                        "canScheduleExactAlarms() = true"
-                    } else {
-                        "Using Doze-aware setAndAllowWhileIdle fallback"
-                    }
-                )
-                DiagnosticRowItem(
-                    label = "Battery Optimization Exemption",
-                    isHealthy = diagnostics.ignoringBatteryOptimizations,
-                    statusText = if (diagnostics.ignoringBatteryOptimizations) {
-                        "Unrestricted"
-                    } else {
-                        "Managed by Android Doze (Standard)"
-                    }
-                )
-                Text(
-                    text = "Known Android Platform Limitations:\n" +
-                        "• Force-stopping the app in Android Settings clears all PendingIntents until DayFlow is launched again.\n" +
-                        "• Extreme OEM battery savers may defer alarms during deep idle windows.\n" +
-                        "• Reboot recovery runs automatically via BOOT_COMPLETED after the device unlocks.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onReconcile,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Reconcile Alarms")
-                }
-                Button(
-                    onClick = onSendTest,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Send Test Alert")
-                }
-            }
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-    }
-}
-
 @Composable
 fun JsonBackupRestoreDialog(
     initialJson: String,
     onDismiss: () -> Unit,
-    onImportJson: (String, Boolean) -> Unit,
+    onImportJson: (String, Boolean, Boolean) -> Unit,
     onCopiedMessage: () -> Unit
 ) {
     val clipboard = LocalClipboardManager.current
     var jsonText by remember(initialJson) { mutableStateOf(initialJson) }
     var replaceExisting by remember { mutableStateOf(false) }
+    var restoreSettings by remember { mutableStateOf(true) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("JSON Database Export / Import") },
+        title = { Text("JSON Backup & Restore") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Copy this JSON to back up your reminders, or paste a DayFlow JSON backup below to restore.",
+                    text = "Copy this JSON to back up your reminders and settings, or paste a DayFlow JSON backup below to restore.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -816,12 +769,28 @@ fun JsonBackupRestoreDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
+                        text = "Restore user settings & preferences",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Switch(
+                        checked = restoreSettings,
+                        onCheckedChange = { restoreSettings = it },
+                        modifier = Modifier.testTag("json_restore_settings_switch")
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
                         text = "Replace existing reminders on import",
                         style = MaterialTheme.typography.bodySmall
                     )
                     Switch(
                         checked = replaceExisting,
-                        onCheckedChange = { replaceExisting = it }
+                        onCheckedChange = { replaceExisting = it },
+                        modifier = Modifier.testTag("json_replace_existing_switch")
                     )
                 }
             }
@@ -837,7 +806,7 @@ fun JsonBackupRestoreDialog(
                     Text("Copy JSON")
                 }
                 Button(
-                    onClick = { onImportJson(jsonText, replaceExisting) },
+                    onClick = { onImportJson(jsonText, replaceExisting, restoreSettings) },
                     modifier = Modifier.testTag("json_import_confirm_button")
                 ) {
                     Text("Import JSON")

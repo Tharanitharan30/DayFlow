@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -266,7 +269,15 @@ fun CalendarScreen(
                                 onToggleComplete = { onToggleComplete(reminder) },
                                 onSnooze = { mins -> onSnooze(reminder, mins) },
                                 onTogglePauseRecurrence = { onTogglePauseRecurrence(reminder) },
-                                onClick = { onEditReminder(reminder) }
+                                onClick = { onEditReminder(reminder) },
+                                modifier = Modifier.animateItem(
+                                    fadeInSpec = tween(durationMillis = 220),
+                                    placementSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    ),
+                                    fadeOutSpec = tween(durationMillis = 200)
+                                )
                             )
                         }
                     }
@@ -324,7 +335,15 @@ fun CalendarScreen(
                         onToggleComplete = { onToggleComplete(reminder) },
                         onSnooze = { mins -> onSnooze(reminder, mins) },
                         onTogglePauseRecurrence = { onTogglePauseRecurrence(reminder) },
-                        onClick = { onEditReminder(reminder) }
+                        onClick = { onEditReminder(reminder) },
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = tween(durationMillis = 220),
+                            placementSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
+                            fadeOutSpec = tween(durationMillis = 200)
+                        )
                     )
                 }
             }
@@ -363,9 +382,10 @@ private fun MonthCalendarGrid(
     val totalCells = ((leadingEmptyCount + daysInMonth + 6) / 7) * 7
 
     Card(
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
@@ -485,9 +505,10 @@ private fun WeekStripCard(
     val dayNameFormatter = remember { DateTimeFormatter.ofPattern("EEE", Locale.US) }
 
     Card(
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
@@ -580,9 +601,10 @@ private fun DailyHourlyTimelineCard(
     }
 
     Card(
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier

@@ -379,6 +379,10 @@ class ReminderRepository(
                 put("isRecurrencePaused", r.isRecurrencePaused)
                 put("notificationEnabled", r.notificationEnabled)
                 put("advanceAlertOffsetsMinutes", r.advanceAlertOffsetsMinutes)
+                put("isRingingAlarm", r.isRingingAlarm)
+                put("alarmSoundUri", r.alarmSoundUri)
+                put("alarmVibration", r.alarmVibration)
+                put("snoozeDurationMinutes", r.snoozeDurationMinutes)
                 put("isCompleted", r.isCompleted)
                 put("completedAtEpochMillis", r.completedAtEpochMillis ?: JSONObject.NULL)
                 put("createdAtEpochMillis", r.createdAtEpochMillis)
@@ -404,6 +408,10 @@ class ReminderRepository(
                     put("localDateStr", t.localDateStr)
                     put("localTimeStr", t.localTimeStr)
                     put("colorHex", t.colorHex)
+                    put("isRingingAlarm", t.isRingingAlarm)
+                    put("alarmSoundUri", t.alarmSoundUri)
+                    put("alarmVibration", t.alarmVibration)
+                    put("snoozeDurationMinutes", t.snoozeDurationMinutes)
                 }
                 tasksArray.put(obj)
             }
@@ -489,6 +497,10 @@ class ReminderRepository(
                     isRecurrencePaused = obj.optBoolean("isRecurrencePaused", false),
                     notificationEnabled = obj.optBoolean("notificationEnabled", true),
                     advanceAlertOffsetsMinutes = obj.optString("advanceAlertOffsetsMinutes", "0"),
+                    isRingingAlarm = obj.optBoolean("isRingingAlarm", false),
+                    alarmSoundUri = obj.optString("alarmSoundUri", "system"),
+                    alarmVibration = obj.optBoolean("alarmVibration", true),
+                    snoozeDurationMinutes = obj.optInt("snoozeDurationMinutes", 10).coerceAtLeast(1),
                     isCompleted = obj.optBoolean("isCompleted", false),
                     completedAtEpochMillis = completedAt,
                     createdAtEpochMillis = obj.optLong("createdAtEpochMillis", System.currentTimeMillis()),
@@ -516,7 +528,11 @@ class ReminderRepository(
                     priority = Task.parsePriority(obj.optString("priority", "MEDIUM")),
                     isCompleted = obj.optBoolean("isCompleted", false),
                     recurrenceRule = obj.optString("recurrenceRule", "NONE"),
-                    seriesId = obj.optString("seriesId", UUID.randomUUID().toString())
+                    seriesId = obj.optString("seriesId", UUID.randomUUID().toString()),
+                    isRingingAlarm = obj.optBoolean("isRingingAlarm", false),
+                    alarmSoundUri = obj.optString("alarmSoundUri", "system"),
+                    alarmVibration = obj.optBoolean("alarmVibration", true),
+                    snoozeDurationMinutes = obj.optInt("snoozeDurationMinutes", 10).coerceAtLeast(1)
                 )
                 taskDao.insertTask(task)
                 importedTasksCount++

@@ -4,15 +4,76 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Subtle inner halo circle -->
+
+    <!-- Subtle radial glow behind clock -->
     <path
-        android:fillColor="#1A38BDF8"
-        android:pathData="M54,24A30,30 0,1 1,24 54A30,30 0,0 1,54 24Z" />
-    <!-- Bold calendar & check silhouette in warm amber/gold and crisp white -->
+        android:fillColor="#1538BDF8"
+        android:pathData="M54,22A32,32 0 1,1 53.9,22Z" />
+
+    <!-- Left Alarm Bell / Hammer -->
     <path
         android:fillColor="#F59E0B"
-        android:pathData="M37,30h6v6h22v-6h6v6h4c3.3,0 6,2.7 6,6v32c0,3.3 -2.7,6 -6,6H33c-3.3,0 -6,-2.7 -6,-6V42c0,-3.3 2.7,-6 6,-6h4v-6zM33,48v26h42V48H33z" />
+        android:pathData="M31.5,33.5 C30.2,30.3 32.5,26.5 36.3,25.2 C40.1,23.9 44,25.8 45.3,29 Z" />
+
+    <!-- Right Alarm Bell / Hammer -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M49.5,67.5L40,58l4.2,-4.2l5.3,5.3l14.3,-14.3L68,49L49.5,67.5z" />
+        android:fillColor="#F59E0B"
+        android:pathData="M76.5,33.5 C77.8,30.3 75.5,26.5 71.7,25.2 C67.9,23.9 64,25.8 62.7,29 Z" />
+
+    <!-- Left Alarm Foot -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M33,75 L28,82 C27.5,82.8 28.1,83.8 29.1,83.8 L38,78 Z" />
+
+    <!-- Right Alarm Foot -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M75,75 L80,82 C80.5,82.8 79.9,83.8 78.9,83.8 L70,78 Z" />
+
+    <!-- Outer Clock Bezel -->
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M54,32 A23,23 0 1,1 53.9,32Z" />
+
+    <!-- Inner Dial Face -->
+    <path
+        android:fillColor="#0B132B"
+        android:pathData="M54,36 A19,19 0 1,1 53.9,36Z" />
+
+    <!-- Left Ringing Wave -->
+    <path
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="2.8"
+        android:strokeLineCap="round"
+        android:pathData="M23,48 C20.5,52.5 20.5,57.5 23,62" />
+
+    <!-- Right Ringing Wave -->
+    <path
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="2.8"
+        android:strokeLineCap="round"
+        android:pathData="M85,48 C87.5,52.5 87.5,57.5 85,62" />
+
+    <!-- Top & Cardinal Dial Hour Markers -->
+    <path
+        android:fillColor="#94A3B8"
+        android:pathData="M54,38.5 A1.2,1.2 0 1,1 53.9,38.5Z" />
+    <path
+        android:fillColor="#94A3B8"
+        android:pathData="M70.5,55 A1.2,1.2 0 1,1 70.4,55Z" />
+    <path
+        android:fillColor="#94A3B8"
+        android:pathData="M54,71.5 A1.2,1.2 0 1,1 53.9,71.5Z" />
+    <path
+        android:fillColor="#94A3B8"
+        android:pathData="M37.5,55 A1.2,1.2 0 1,1 37.4,55Z" />
+
+    <!-- Dynamic Flow Checkmark in Center representing Completed Tasks & Alarm Precision -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M43.5,54.5 L50.5,61.5 L64.5,47.5 L67.5,50.5 L50.5,67.5 L40.5,57.5 Z" />
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M50.5,61.5 L64.5,47.5 L66.5,49.5 L50.5,65.5 Z" />
+
 </vector>

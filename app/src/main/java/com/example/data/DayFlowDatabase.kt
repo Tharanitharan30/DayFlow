@@ -9,14 +9,15 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [ReminderEntity::class, Task::class],
-    version = 3,
+    entities = [ReminderEntity::class, Task::class, AlarmHistoryEntity::class],
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(RoomTypeConverters::class)
 abstract class DayFlowDatabase : RoomDatabase() {
     abstract fun reminderDao(): ReminderDao
     abstract fun taskDao(): TaskDao
+    abstract fun alarmHistoryDao(): AlarmHistoryDao
 
     companion object {
         @Volatile
@@ -68,6 +69,40 @@ abstract class DayFlowDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `reminders` ADD COLUMN `isRingingAlarm` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `reminders` ADD COLUMN `alarmSoundUri` TEXT NOT NULL DEFAULT 'system'")
+                db.execSQL("ALTER TABLE `reminders` ADD COLUMN `alarmVibration` INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE `reminders` ADD COLUMN `snoozeDurationMinutes` INTEGER NOT NULL DEFAULT 10")
+
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `is_ringing_alarm` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `alarm_sound_uri` TEXT NOT NULL DEFAULT 'system'")
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `alarm_vibration` INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `snooze_duration_minutes` INTEGER NOT NULL DEFAULT 10")
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `alarm_history` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `reminder_id` INTEGER NOT NULL,
+                        `task_title` TEXT NOT NULL,
+                        `scheduled_epoch_millis` INTEGER NOT NULL,
+                        `actual_trigger_epoch_millis` INTEGER NOT NULL,
+                        `delay_seconds` INTEGER NOT NULL,
+                        `is_ringing` INTEGER NOT NULL,
+                        `trigger_source` TEXT NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_alarm_history_trigger_time` ON `alarm_history` (`actual_trigger_epoch_millis`)")
+            }
+        }
+
         fun getInstance(context: Context): DayFlowDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -75,8 +110,8 @@ abstract class DayFlowDatabase : RoomDatabase() {
                     DayFlowDatabase::class.java,
                     "dayflow_reminders.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
-                    .fallbackToDestructiveMigration()
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .fallbackToDestructiveMigration(dropAllTables = false)
                     .build()
                 INSTANCE = instance
                 instance

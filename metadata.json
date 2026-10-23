@@ -1,6 +1,6 @@
 {
   "name": "DayFlow",
-  "description": "A native Android personal reminder, recurring task planner, and daily agenda app with reliable local notifications and offline SQLite persistence.",
+  "description": "A native Android task planner, recurring schedule manager, and Clock-style ringing alarm system with full-screen lock screen alerts, reliable native AlarmManager scheduling, and battery delay diagnostics.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

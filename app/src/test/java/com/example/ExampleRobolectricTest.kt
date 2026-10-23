@@ -46,7 +46,7 @@ class ExampleRobolectricTest {
         db = DayFlowDatabase.createInMemory(context)
         scheduler = ReminderScheduler(context)
         prefs = UserPreferencesRepository(context)
-        repository = ReminderRepository(db.reminderDao(), scheduler, prefs)
+        repository = ReminderRepository(db.reminderDao(), scheduler, prefs, db.taskDao())
     }
 
     @After
@@ -218,8 +218,12 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `json export and import preserves reminders and recurrence metadata`() = runBlocking {
+    fun `json export and import preserves reminders tasks and user settings`() = runBlocking {
         val dateStr = DateTimeUtils.formatLocalDate(LocalDate.now().plusDays(1))
+        prefs.setThemeMode(com.example.data.ThemeMode.DARK)
+        prefs.setUse24HourFormat(true)
+        prefs.setDefaultAdvanceMinutes(15)
+
         repository.createOrUpdateReminder(
             ReminderEntity(
                 title = "Backup Verification Task",
@@ -237,16 +241,38 @@ class ExampleRobolectricTest {
 
         val exportedJson = repository.exportRemindersToJson()
         assertTrue(exportedJson.contains("Backup Verification Task"))
+        assertTrue(exportedJson.contains("\"settings\""))
 
-        val importedCount = repository.importRemindersFromJson(exportedJson, replaceExisting = true)
-        assertEquals(1, importedCount)
+        // Change settings before restoring to verify restoreSettingsFromJson overwrites them
+        prefs.setThemeMode(com.example.data.ThemeMode.LIGHT)
+        prefs.setUse24HourFormat(false)
+        prefs.setDefaultAdvanceMinutes(5)
+
+        val backupSummary = repository.importBackupFromJson(
+            jsonString = exportedJson,
+            replaceExisting = true,
+            restoreSettings = true
+        )
+        assertEquals(1, backupSummary.remindersImported)
+        assertTrue(backupSummary.settingsRestored)
+
+        val restoredSettings = prefs.getSettingsSync()
+        assertEquals(com.example.data.ThemeMode.DARK, restoredSettings.themeMode)
+        assertTrue(restoredSettings.use24HourFormat)
+        assertEquals(15, restoredSettings.defaultAdvanceMinutes)
 
         val all = db.reminderDao().getAllRemindersSync()
         assertEquals(1, all.size)
         assertEquals("Backup Verification Task", all.first().title)
         assertEquals(RecurrenceType.SELECTED_WEEKDAYS, all.first().recurrenceType)
         assertEquals("1,3,5", all.first().recurrenceWeekdays)
-        assertEquals( listOf(0, 10, 30), all.first().parsedAdvanceOffsets())
+        assertEquals(listOf(0, 10, 30), all.first().parsedAdvanceOffsets())
+
+        // Verify NotificationDiagnostics snapshot
+        val diagnostics = scheduler.getDiagnostics(all)
+        assertEquals(1, diagnostics.activeScheduledRemindersCount)
+        assertTrue(diagnostics.deviceManufacturer.isNotBlank())
+        assertTrue(diagnostics.oemPowerGuidance.isNotBlank())
     }
 
     @Test
@@ -328,5 +354,100 @@ class ExampleRobolectricTest {
 
         taskDao.deleteTask(updatedEarlier)
         assertNull(taskDao.getTaskById(earlierId))
+    }
+
+    @Test
+    fun `task with isRingingAlarm schedules AlarmClockInfo and supports snooze and dismiss`() = runBlocking {
+        val futureDateStr = DateTimeUtils.formatLocalDate(LocalDate.now().plusDays(1))
+        val ringingReminder = ReminderEntity(
+            title = "Morning Medicine Alarm",
+            description = "Take prescribed dose with water",
+            localDateStr = futureDateStr,
+            localTimeStr = "08:00",
+            scheduledEpochMillis = DateTimeUtils.computeEpochMillis(futureDateStr, "08:00"),
+            isRingingAlarm = true,
+            alarmVibration = true,
+            snoozeDurationMinutes = 10,
+            advanceAlertOffsetsMinutes = "0"
+        )
+
+        val id = repository.createOrUpdateReminder(ringingReminder)
+        assertTrue(id > 0L)
+
+        val saved = repository.getReminderByIdSync(id)
+        assertNotNull(saved)
+        assertTrue(saved!!.isRingingAlarm)
+        assertTrue(saved.alarmVibration)
+        assertEquals(10, saved.snoozeDurationMinutes)
+
+        // Verify AlarmManager received an alarm
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val shadowAlarmManager = shadowOf(alarmManager)
+        assertEquals(1, shadowAlarmManager.scheduledAlarms.size)
+        val scheduledAlarm = shadowAlarmManager.scheduledAlarms.first()
+        assertNotNull("Ringing alarm should be scheduled with AlarmClockInfo", scheduledAlarm.alarmClockInfo)
+
+        // Snooze the alarm for 10 minutes
+        val snoozed = repository.snoozeReminder(id, 10)
+        assertNotNull(snoozed)
+        assertNotNull(snoozed?.snoozedUntilEpochMillis)
+        assertEquals(1, shadowAlarmManager.scheduledAlarms.size)
+        val snoozedAlarm = shadowAlarmManager.scheduledAlarms.first()
+        assertNotNull("Snoozed ringing alarm should also use AlarmClockInfo", snoozedAlarm.alarmClockInfo)
+
+        // Completing or deleting cancels scheduled alarm
+        repository.setReminderCompleted(id, true)
+        assertEquals(0, shadowAlarmManager.scheduledAlarms.size)
+    }
+
+    @Test
+    fun `alarm history tracks triggered alarms actual vs scheduled times and limits to last 10`() = runBlocking {
+        val historyDao = db.alarmHistoryDao()
+        val now = System.currentTimeMillis()
+
+        // Insert 12 alarm firing records with varying delays (on-time, minor, severe)
+        for (i in 1..12) {
+            val scheduled = now + (i * 60_000L)
+            val delaySeconds = when {
+                i % 3 == 0 -> 240L // severe (> 3m)
+                i % 2 == 0 -> 45L  // minor (< 3m)
+                else -> 2L         // on-time (<= 15s)
+            }
+            val actual = scheduled + (delaySeconds * 1000L)
+            historyDao.insert(
+                com.example.data.AlarmHistoryEntity(
+                    reminderId = i.toLong(),
+                    taskTitle = "Task Trigger #$i",
+                    scheduledEpochMillis = scheduled,
+                    actualTriggerEpochMillis = actual,
+                    delaySeconds = delaySeconds,
+                    isRinging = i % 2 == 0,
+                    triggerSource = "ALARM_CLOCK"
+                )
+            )
+        }
+
+        // Prune to last 10 entries
+        historyDao.pruneToLastTen()
+        val recentList = historyDao.getRecentHistorySync()
+        assertEquals(10, recentList.size)
+
+        // Most recent should have the highest actualTriggerEpochMillis
+        val latest = recentList.first()
+        assertEquals("Task Trigger #12", latest.taskTitle)
+        assertEquals(240L, latest.delaySeconds)
+        assertEquals(com.example.data.DelaySeverity.SEVERE, latest.delaySeverity)
+
+        // Check severe delay categorization
+        val severeItem = recentList.first { it.delaySeconds == 240L }
+        assertEquals(com.example.data.DelaySeverity.SEVERE, severeItem.delaySeverity)
+
+        // Check on-time delay categorization
+        val onTimeItem = recentList.first { it.delaySeconds == 2L }
+        assertEquals(com.example.data.DelaySeverity.ON_TIME, onTimeItem.delaySeverity)
+
+        // Clear history
+        historyDao.clearAllHistory()
+        assertEquals(0, historyDao.getRecentHistorySync().size)
     }
 }

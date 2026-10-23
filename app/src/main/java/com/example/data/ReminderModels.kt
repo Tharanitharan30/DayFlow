@@ -97,6 +97,10 @@ data class ReminderEntity(
     val snoozedUntilEpochMillis: Long? = null,
     val isCompleted: Boolean = false,
     val completedAtEpochMillis: Long? = null,
+    val isRingingAlarm: Boolean = false,
+    val alarmSoundUri: String = "system",
+    val alarmVibration: Boolean = true,
+    val snoozeDurationMinutes: Int = 10,
     val createdAtEpochMillis: Long = System.currentTimeMillis(),
     val updatedAtEpochMillis: Long = System.currentTimeMillis()
 ) {
@@ -190,6 +194,16 @@ object DateTimeUtils {
     fun formatEpochTime(epochMillis: Long, use24Hour: Boolean, zoneId: ZoneId = ZoneId.systemDefault()): String {
         val time = Instant.ofEpochMilli(epochMillis).atZone(zoneId).toLocalTime()
         return if (use24Hour) time.format(timeFormatter24) else time.format(timeFormatter12)
+    }
+
+    fun formatEpochDateTimeWithSeconds(
+        epochMillis: Long,
+        use24Hour: Boolean,
+        zoneId: ZoneId = ZoneId.systemDefault()
+    ): String {
+        val dt = Instant.ofEpochMilli(epochMillis).atZone(zoneId).toLocalDateTime()
+        val pattern = if (use24Hour) "MMM d, HH:mm:ss" else "MMM d, h:mm:ss a"
+        return dt.format(DateTimeFormatter.ofPattern(pattern, Locale.US))
     }
 
     fun formatFriendlyDate(localDateStr: String, today: LocalDate = LocalDate.now()): String {

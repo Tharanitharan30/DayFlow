@@ -2,56 +2,59 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Light Theme — Serene Horizon Palette
-val TealPrimaryLight = Color(0xFF0A6670)
-val OnTealPrimaryLight = Color(0xFFFFFFFF)
-val TealContainerLight = Color(0xFFC7F2F7)
-val OnTealContainerLight = Color(0xFF001F23)
-
-val AmberSecondaryLight = Color(0xFFB45309)
-val OnAmberSecondaryLight = Color(0xFFFFFFFF)
-val AmberContainerLight = Color(0xFFFEF3C7)
-val OnAmberContainerLight = Color(0xFF3B1800)
-
-val IndigoTertiaryLight = Color(0xFF4338CA)
-val OnIndigoTertiaryLight = Color(0xFFFFFFFF)
+// Light Theme — Warm Indigo & Emerald Minimal Productivity Palette
+val IndigoPrimaryLight = Color(0xFF4F46E5)
+val OnIndigoPrimaryLight = Color(0xFFFFFFFF)
 val IndigoContainerLight = Color(0xFFE0E7FF)
 val OnIndigoContainerLight = Color(0xFF1E1B4B)
 
-val BackgroundLight = Color(0xFFF6F9FA)
-val OnBackgroundLight = Color(0xFF111C1E)
+val EmeraldSecondaryLight = Color(0xFF059669)
+val OnEmeraldSecondaryLight = Color(0xFFFFFFFF)
+val EmeraldContainerLight = Color(0xFFD1FAE5)
+val OnEmeraldContainerLight = Color(0xFF064E3B)
+
+val SkyTertiaryLight = Color(0xFF0284C7)
+val OnSkyTertiaryLight = Color(0xFFFFFFFF)
+val SkyContainerLight = Color(0xFFE0F2FE)
+val OnSkyContainerLight = Color(0xFF0C4A6E)
+
+val BackgroundLight = Color(0xFFF8FAFC)
+val OnBackgroundLight = Color(0xFF0F172A)
 val SurfaceLight = Color(0xFFFFFFFF)
-val OnSurfaceLight = Color(0xFF111C1E)
-val SurfaceVariantLight = Color(0xFFE6EFF1)
-val OnSurfaceVariantLight = Color(0xFF425458)
-val OutlineLight = Color(0xFF72868A)
+val OnSurfaceLight = Color(0xFF0F172A)
+val SurfaceVariantLight = Color(0xFFF1F5F9)
+val OnSurfaceVariantLight = Color(0xFF475569)
+val OutlineLight = Color(0xFFCBD5E1)
+val OutlineVariantLight = Color(0xFFE2E8F0)
 
-// Dark Theme — Deep Midnight Lagoon Palette
-val TealPrimaryDark = Color(0xFF4FD8EB)
-val OnTealPrimaryDark = Color(0xFF00363C)
-val TealContainerDark = Color(0xFF004F57)
-val OnTealContainerDark = Color(0xFF97F0FF)
-
-val AmberSecondaryDark = Color(0xFFFBBF24)
-val OnAmberSecondaryDark = Color(0xFF451A03)
-val AmberContainerDark = Color(0xFF78350F)
-val OnAmberContainerDark = Color(0xFFFDE68A)
-
-val IndigoTertiaryDark = Color(0xFFA5B4FC)
-val OnIndigoTertiaryDark = Color(0xFF1E1B4B)
+// Dark Theme — Deep Obsidian Slate with Luminous Indigo & Emerald
+val IndigoPrimaryDark = Color(0xFF818CF8)
+val OnIndigoPrimaryDark = Color(0xFF1E1B4B)
 val IndigoContainerDark = Color(0xFF312E81)
 val OnIndigoContainerDark = Color(0xFFE0E7FF)
 
-val BackgroundDark = Color(0xFF0A1417)
-val OnBackgroundDark = Color(0xFFE1ECEE)
-val SurfaceDark = Color(0xFF111F24)
-val OnSurfaceDark = Color(0xFFE1ECEE)
-val SurfaceVariantDark = Color(0xFF1D2F36)
-val OnSurfaceVariantDark = Color(0xFFB8CAD0)
-val OutlineDark = Color(0xFF60767D)
+val EmeraldSecondaryDark = Color(0xFF34D399)
+val OnEmeraldSecondaryDark = Color(0xFF064E3B)
+val EmeraldContainerDark = Color(0xFF065F46)
+val OnEmeraldContainerDark = Color(0xFFD1FAE5)
 
-// Semantic Priority & Category Colors
+val SkyTertiaryDark = Color(0xFF38BDF8)
+val OnSkyTertiaryDark = Color(0xFF082F49)
+val SkyContainerDark = Color(0xFF0369A1)
+val OnSkyContainerDark = Color(0xFFE0F2FE)
+
+val BackgroundDark = Color(0xFF0B0F19)
+val OnBackgroundDark = Color(0xFFF1F5F9)
+val SurfaceDark = Color(0xFF111827)
+val OnSurfaceDark = Color(0xFFF1F5F9)
+val SurfaceVariantDark = Color(0xFF1E293B)
+val OnSurfaceVariantDark = Color(0xFF94A3B8)
+val OutlineDark = Color(0xFF334155)
+val OutlineVariantDark = Color(0xFF1F2937)
+
+// Semantic Priority & Status Colors
 val PriorityHighColor = Color(0xFFE11D48)
 val PriorityMediumColor = Color(0xFFD97706)
 val PriorityLowColor = Color(0xFF0D9488)
 val CompletedSuccessColor = Color(0xFF10B981)
+val SnoozeAccentColor = Color(0xFFF59E0B)

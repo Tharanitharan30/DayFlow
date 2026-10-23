@@ -11,18 +11,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 private val DarkColorScheme = darkColorScheme(
-    primary = TealPrimaryDark,
-    onPrimary = OnTealPrimaryDark,
-    primaryContainer = TealContainerDark,
-    onPrimaryContainer = OnTealContainerDark,
-    secondary = AmberSecondaryDark,
-    onSecondary = OnAmberSecondaryDark,
-    secondaryContainer = AmberContainerDark,
-    onSecondaryContainer = OnAmberContainerDark,
-    tertiary = IndigoTertiaryDark,
-    onTertiary = OnIndigoTertiaryDark,
-    tertiaryContainer = IndigoContainerDark,
-    onTertiaryContainer = OnIndigoContainerDark,
+    primary = IndigoPrimaryDark,
+    onPrimary = OnIndigoPrimaryDark,
+    primaryContainer = IndigoContainerDark,
+    onPrimaryContainer = OnIndigoContainerDark,
+    secondary = EmeraldSecondaryDark,
+    onSecondary = OnEmeraldSecondaryDark,
+    secondaryContainer = EmeraldContainerDark,
+    onSecondaryContainer = OnEmeraldContainerDark,
+    tertiary = SkyTertiaryDark,
+    onTertiary = OnSkyTertiaryDark,
+    tertiaryContainer = SkyContainerDark,
+    onTertiaryContainer = OnSkyContainerDark,
     background = BackgroundDark,
     onBackground = OnBackgroundDark,
     surface = SurfaceDark,
@@ -30,23 +30,26 @@ private val DarkColorScheme = darkColorScheme(
     surfaceVariant = SurfaceVariantDark,
     onSurfaceVariant = OnSurfaceVariantDark,
     outline = OutlineDark,
-    error = Color(0xFFFF6B8B),
-    onError = Color(0xFF4C0519)
+    outlineVariant = OutlineVariantDark,
+    error = Color(0xFFFB7185),
+    onError = Color(0xFF4C0519),
+    errorContainer = Color(0xFF881337),
+    onErrorContainer = Color(0xFFFFE4E6)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = TealPrimaryLight,
-    onPrimary = OnTealPrimaryLight,
-    primaryContainer = TealContainerLight,
-    onPrimaryContainer = OnTealContainerLight,
-    secondary = AmberSecondaryLight,
-    onSecondary = OnAmberSecondaryLight,
-    secondaryContainer = AmberContainerLight,
-    onSecondaryContainer = OnAmberContainerLight,
-    tertiary = IndigoTertiaryLight,
-    onTertiary = OnIndigoTertiaryLight,
-    tertiaryContainer = IndigoContainerLight,
-    onTertiaryContainer = OnIndigoContainerLight,
+    primary = IndigoPrimaryLight,
+    onPrimary = OnIndigoPrimaryLight,
+    primaryContainer = IndigoContainerLight,
+    onPrimaryContainer = OnIndigoContainerLight,
+    secondary = EmeraldSecondaryLight,
+    onSecondary = OnEmeraldSecondaryLight,
+    secondaryContainer = EmeraldContainerLight,
+    onSecondaryContainer = OnEmeraldContainerLight,
+    tertiary = SkyTertiaryLight,
+    onTertiary = OnSkyTertiaryLight,
+    tertiaryContainer = SkyContainerLight,
+    onTertiaryContainer = OnSkyContainerLight,
     background = BackgroundLight,
     onBackground = OnBackgroundLight,
     surface = SurfaceLight,
@@ -54,15 +57,18 @@ private val LightColorScheme = lightColorScheme(
     surfaceVariant = SurfaceVariantLight,
     onSurfaceVariant = OnSurfaceVariantLight,
     outline = OutlineLight,
+    outlineVariant = OutlineVariantLight,
     error = Color(0xFFE11D48),
-    onError = Color.White
+    onError = Color.White,
+    errorContainer = Color(0xFFFFE4E6),
+    onErrorContainer = Color(0xFF881337)
 )
 
 val DayFlowShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
     small = RoundedCornerShape(12.dp),
     medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(22.dp),
+    large = RoundedCornerShape(20.dp),
     extraLarge = RoundedCornerShape(28.dp)
 )
 

@@ -107,6 +107,18 @@ data class Task(
     @ColumnInfo(name = "color_hex")
     val colorHex: String = category.defaultColorHex,
 
+    @ColumnInfo(name = "is_ringing_alarm")
+    val isRingingAlarm: Boolean = false,
+
+    @ColumnInfo(name = "alarm_sound_uri")
+    val alarmSoundUri: String = "system",
+
+    @ColumnInfo(name = "alarm_vibration")
+    val alarmVibration: Boolean = true,
+
+    @ColumnInfo(name = "snooze_duration_minutes")
+    val snoozeDurationMinutes: Int = 10,
+
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
 
@@ -160,6 +172,10 @@ data class Task(
             recurrenceMaxOccurrences = recurrenceMaxOccurrences,
             isRecurrencePaused = isRecurrencePaused,
             notificationEnabled = notificationEnabled,
+            isRingingAlarm = isRingingAlarm,
+            alarmSoundUri = alarmSoundUri,
+            alarmVibration = alarmVibration,
+            snoozeDurationMinutes = snoozeDurationMinutes,
             isCompleted = isCompleted,
             completedAtEpochMillis = completedAt,
             createdAtEpochMillis = createdAt,
@@ -255,6 +271,10 @@ data class Task(
                 isRecurrencePaused = entity.isRecurrencePaused,
                 notificationEnabled = entity.notificationEnabled,
                 colorHex = entity.colorHex,
+                isRingingAlarm = entity.isRingingAlarm,
+                alarmSoundUri = entity.alarmSoundUri,
+                alarmVibration = entity.alarmVibration,
+                snoozeDurationMinutes = entity.snoozeDurationMinutes,
                 createdAt = entity.createdAtEpochMillis,
                 updatedAt = entity.updatedAtEpochMillis
             )

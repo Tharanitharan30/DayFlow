@@ -49,8 +49,8 @@ import com.example.ui.components.ReminderEditorSheet
 import com.example.ui.screens.AllTasksScreen
 import com.example.ui.screens.CalendarScreen
 import com.example.ui.screens.DashboardScreen
-import com.example.ui.screens.DiagnosticsModalSheet
 import com.example.ui.screens.JsonBackupRestoreDialog
+import com.example.ui.screens.NotificationDiagnosticsScreen
 import com.example.ui.screens.OnboardingDialog
 import com.example.ui.screens.SettingsAndDiagnosticsScreen
 import kotlinx.coroutines.Dispatchers
@@ -117,7 +117,7 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
     }
 
     // Back button handling for secondary tabs
-    BackHandler(enabled = navState.currentTab != MainTab.HOME) {
+    BackHandler(enabled = !navState.showDiagnosticsSheet && navState.currentTab != MainTab.HOME) {
         viewModel.selectTab(MainTab.HOME)
     }
 
@@ -130,7 +130,7 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
             if (granted) {
                 "Notification permission granted!"
             } else {
-                "Notification permission denied. You can enable it anytime in Settings."
+                "Notification permission denied. You can enable it anytime in Notification Diagnostics."
             }
         )
     }
@@ -144,7 +144,7 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
         }
     }
 
-    // SAF File Export Launcher for JSON Backup
+    // SAF File Export Launcher for JSON Backup (Reminders + Tasks + Settings)
     val exportJsonLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -157,7 +157,7 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
                             out.write(json.toByteArray(Charsets.UTF_8))
                         }
                     }
-                    viewModel.showMessage("Exported DayFlow backup to JSON file")
+                    viewModel.showMessage("Exported reminders & settings backup to JSON file")
                 }.onFailure {
                     viewModel.showMessage("Failed to write JSON file: ${it.localizedMessage}")
                 }
@@ -178,7 +178,11 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
                         } ?: ""
                     }
                     if (content.isNotBlank()) {
-                        viewModel.importFromJsonString(content, replaceExisting = false)
+                        viewModel.importFromJsonString(
+                            jsonString = content,
+                            replaceExisting = false,
+                            restoreSettings = true
+                        )
                     }
                 }.onFailure {
                     viewModel.showMessage("Failed to import JSON file: ${it.localizedMessage}")
@@ -201,7 +205,7 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
         Scaffold(
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             floatingActionButton = {
-                if (navState.currentTab != MainTab.SETTINGS) {
+                if (!navState.showDiagnosticsSheet && navState.currentTab != MainTab.SETTINGS) {
                     ExtendedFloatingActionButton(
                         onClick = {
                             val presetDate = if (navState.currentTab == MainTab.CALENDAR) {
@@ -212,7 +216,7 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
                             viewModel.openCreateReminder(presetDate)
                         },
                         icon = { Icon(Icons.Default.Add, contentDescription = "Add Reminder") },
-                        text = { Text("New Reminder") },
+                        text = { Text("New Task") },
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.testTag("fab_quick_add")
@@ -223,7 +227,7 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
                 if (!isWideScreen) {
                     NavigationBar(modifier = Modifier.testTag("bottom_navigation_bar")) {
                         Destinations.forEach { dest ->
-                            val selected = navState.currentTab == dest.tab
+                            val selected = !navState.showDiagnosticsSheet && navState.currentTab == dest.tab
                             NavigationBarItem(
                                 selected = selected,
                                 onClick = { viewModel.selectTab(dest.tab) },
@@ -249,7 +253,7 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
                 if (isWideScreen) {
                     NavigationRail(modifier = Modifier.testTag("navigation_rail")) {
                         Destinations.forEach { dest ->
-                            val selected = navState.currentTab == dest.tab
+                            val selected = !navState.showDiagnosticsSheet && navState.currentTab == dest.tab
                             NavigationRailItem(
                                 selected = selected,
                                 onClick = { viewModel.selectTab(dest.tab) },
@@ -266,92 +270,109 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
                     }
                 }
 
-                when (navState.currentTab) {
-                    MainTab.HOME -> {
-                        DashboardScreen(
-                            reminders = state.reminders,
-                            use24Hour = state.settings.use24HourFormat,
-                            diagnostics = state.diagnostics,
-                            onQuickAdd = { title -> viewModel.quickAddReminder(title) },
-                            onOpenFullCreate = { viewModel.openCreateReminder() },
-                            onEditReminder = { viewModel.openEditReminder(it) },
-                            onToggleComplete = { viewModel.toggleCompleted(it) },
-                            onSnooze = { r, mins -> viewModel.snoozeReminder(r, mins) },
-                            onTogglePauseRecurrence = { viewModel.togglePauseRecurrence(it) },
-                            onOpenDiagnostics = { viewModel.setDiagnosticsSheetOpen(true) },
-                            onClearCompleted = { viewModel.clearCompletedReminders() },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                if (navState.showDiagnosticsSheet) {
+                    NotificationDiagnosticsScreen(
+                        diagnostics = state.diagnostics,
+                        lastReconciledMillis = state.settings.lastReconciledEpochMillis,
+                        use24Hour = state.settings.use24HourFormat,
+                        alarmHistory = state.alarmHistory,
+                        onBack = { viewModel.setDiagnosticsSheetOpen(false) },
+                        onRequestNotificationPermission = requestNotificationPermission,
+                        onSendTestNotification = { viewModel.sendTestNotification() },
+                        onTriggerTestRingingAlarm = { viewModel.triggerTestRingingAlarm() },
+                        onClearAlarmHistory = { viewModel.clearAlarmHistory() },
+                        onReconcileAlarms = { viewModel.reconcileAlarmsNow() },
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    when (navState.currentTab) {
+                        MainTab.HOME -> {
+                            DashboardScreen(
+                                reminders = state.reminders,
+                                use24Hour = state.settings.use24HourFormat,
+                                diagnostics = state.diagnostics,
+                                onQuickAdd = { title -> viewModel.quickAddReminder(title) },
+                                onOpenFullCreate = { viewModel.openCreateReminder() },
+                                onEditReminder = { viewModel.openEditReminder(it) },
+                                onToggleComplete = { viewModel.toggleCompleted(it) },
+                                onSnooze = { r, mins -> viewModel.snoozeReminder(r, mins) },
+                                onTogglePauseRecurrence = { viewModel.togglePauseRecurrence(it) },
+                                onOpenDiagnostics = { viewModel.setDiagnosticsSheetOpen(true) },
+                                onClearCompleted = { viewModel.clearCompletedReminders() },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
 
-                    MainTab.CALENDAR -> {
-                        CalendarScreen(
-                            reminders = state.reminders,
-                            selectedDateStr = navState.selectedDateStr,
-                            viewMode = navState.calendarViewMode,
-                            use24Hour = state.settings.use24HourFormat,
-                            weekStartsOnMonday = state.settings.weekStartsOnMonday,
-                            onSelectDate = { viewModel.selectCalendarDate(it) },
-                            onChangeViewMode = { viewModel.setCalendarViewMode(it) },
-                            onOpenCreateForDate = { dateStr -> viewModel.openCreateReminder(dateStr) },
-                            onEditReminder = { viewModel.openEditReminder(it) },
-                            onToggleComplete = { viewModel.toggleCompleted(it) },
-                            onSnooze = { r, mins -> viewModel.snoozeReminder(r, mins) },
-                            onTogglePauseRecurrence = { viewModel.togglePauseRecurrence(it) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                        MainTab.CALENDAR -> {
+                            CalendarScreen(
+                                reminders = state.reminders,
+                                selectedDateStr = navState.selectedDateStr,
+                                viewMode = navState.calendarViewMode,
+                                use24Hour = state.settings.use24HourFormat,
+                                weekStartsOnMonday = state.settings.weekStartsOnMonday,
+                                onSelectDate = { viewModel.selectCalendarDate(it) },
+                                onChangeViewMode = { viewModel.setCalendarViewMode(it) },
+                                onOpenCreateForDate = { dateStr -> viewModel.openCreateReminder(dateStr) },
+                                onEditReminder = { viewModel.openEditReminder(it) },
+                                onToggleComplete = { viewModel.toggleCompleted(it) },
+                                onSnooze = { r, mins -> viewModel.snoozeReminder(r, mins) },
+                                onTogglePauseRecurrence = { viewModel.togglePauseRecurrence(it) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
 
-                    MainTab.TASKS -> {
-                        AllTasksScreen(
-                            reminders = state.reminders,
-                            searchQuery = navState.searchQuery,
-                            selectedCategory = navState.selectedCategory,
-                            selectedPriority = navState.selectedPriority,
-                            statusFilter = navState.statusFilter,
-                            sortOrder = navState.sortOrder,
-                            use24Hour = state.settings.use24HourFormat,
-                            onSearchQueryChange = { viewModel.updateSearchQuery(it) },
-                            onSelectCategory = { viewModel.selectCategoryFilter(it) },
-                            onSelectPriority = { viewModel.selectPriorityFilter(it) },
-                            onSelectStatusFilter = { viewModel.selectStatusFilter(it) },
-                            onSelectSortOrder = { viewModel.selectSortOrder(it) },
-                            onClearFilters = { viewModel.clearFilters() },
-                            onOpenCreate = { viewModel.openCreateReminder() },
-                            onEditReminder = { viewModel.openEditReminder(it) },
-                            onToggleComplete = { viewModel.toggleCompleted(it) },
-                            onSnooze = { r, mins -> viewModel.snoozeReminder(r, mins) },
-                            onTogglePauseRecurrence = { viewModel.togglePauseRecurrence(it) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                        MainTab.TASKS -> {
+                            AllTasksScreen(
+                                reminders = state.reminders,
+                                searchQuery = navState.searchQuery,
+                                selectedCategory = navState.selectedCategory,
+                                selectedPriority = navState.selectedPriority,
+                                statusFilter = navState.statusFilter,
+                                sortOrder = navState.sortOrder,
+                                use24Hour = state.settings.use24HourFormat,
+                                onSearchQueryChange = { viewModel.updateSearchQuery(it) },
+                                onSelectCategory = { viewModel.selectCategoryFilter(it) },
+                                onSelectPriority = { viewModel.selectPriorityFilter(it) },
+                                onSelectStatusFilter = { viewModel.selectStatusFilter(it) },
+                                onSelectSortOrder = { viewModel.selectSortOrder(it) },
+                                onClearFilters = { viewModel.clearFilters() },
+                                onOpenCreate = { viewModel.openCreateReminder() },
+                                onEditReminder = { viewModel.openEditReminder(it) },
+                                onToggleComplete = { viewModel.toggleCompleted(it) },
+                                onSnooze = { r, mins -> viewModel.snoozeReminder(r, mins) },
+                                onTogglePauseRecurrence = { viewModel.togglePauseRecurrence(it) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
 
-                    MainTab.SETTINGS -> {
-                        SettingsAndDiagnosticsScreen(
-                            settings = state.settings,
-                            diagnostics = state.diagnostics,
-                            onRequestNotificationPermission = requestNotificationPermission,
-                            onSendTestNotification = { viewModel.sendTestNotification() },
-                            onReconcileAlarms = { viewModel.reconcileAlarmsNow() },
-                            onOpenDiagnosticsModal = { viewModel.setDiagnosticsSheetOpen(true) },
-                            onOpenJsonBackupDialog = { viewModel.openJsonBackupDialog() },
-                            onExportJsonToFile = {
-                                exportJsonLauncher.launch("dayflow_reminders_backup.json")
-                            },
-                            onImportJsonFromFile = {
-                                importJsonLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
-                            },
-                            onSetThemeMode = { viewModel.setThemeMode(it) },
-                            onSetUse24Hour = { viewModel.setUse24HourFormat(it) },
-                            onSetWeekStartsMonday = { viewModel.setWeekStartsOnMonday(it) },
-                            onSetDefaultPriority = { viewModel.setDefaultPriority(it) },
-                            onSetDefaultCategory = { viewModel.setDefaultCategory(it) },
-                            onSetDefaultAdvanceMinutes = { viewModel.setDefaultAdvanceMinutes(it) },
-                            onSetSoundEnabled = { viewModel.setSoundEnabled(it) },
-                            onSetVibrationEnabled = { viewModel.setVibrationEnabled(it) },
-                            onReopenOnboarding = { viewModel.reopenOnboarding() },
-                            modifier = Modifier.weight(1f)
-                        )
+                        MainTab.SETTINGS -> {
+                            SettingsAndDiagnosticsScreen(
+                                settings = state.settings,
+                                diagnostics = state.diagnostics,
+                                onRequestNotificationPermission = requestNotificationPermission,
+                                onSendTestNotification = { viewModel.sendTestNotification() },
+                                onTriggerTestRingingAlarm = { viewModel.triggerTestRingingAlarm() },
+                                onReconcileAlarms = { viewModel.reconcileAlarmsNow() },
+                                onOpenDiagnosticsModal = { viewModel.setDiagnosticsSheetOpen(true) },
+                                onOpenJsonBackupDialog = { viewModel.openJsonBackupDialog() },
+                                onExportJsonToFile = {
+                                    exportJsonLauncher.launch("dayflow_backup.json")
+                                },
+                                onImportJsonFromFile = {
+                                    importJsonLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+                                },
+                                onSetThemeMode = { viewModel.setThemeMode(it) },
+                                onSetUse24Hour = { viewModel.setUse24HourFormat(it) },
+                                onSetWeekStartsMonday = { viewModel.setWeekStartsOnMonday(it) },
+                                onSetDefaultPriority = { viewModel.setDefaultPriority(it) },
+                                onSetDefaultCategory = { viewModel.setDefaultCategory(it) },
+                                onSetDefaultAdvanceMinutes = { viewModel.setDefaultAdvanceMinutes(it) },
+                                onSetSoundEnabled = { viewModel.setSoundEnabled(it) },
+                                onSetVibrationEnabled = { viewModel.setVibrationEnabled(it) },
+                                onReopenOnboarding = { viewModel.reopenOnboarding() },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
             }
@@ -370,23 +391,14 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
         )
     }
 
-    // Notification Diagnostics Bottom Sheet
-    if (navState.showDiagnosticsSheet) {
-        DiagnosticsModalSheet(
-            diagnostics = state.diagnostics,
-            onDismiss = { viewModel.setDiagnosticsSheetOpen(false) },
-            onRequestPermission = requestNotificationPermission,
-            onSendTest = { viewModel.sendTestNotification() },
-            onReconcile = { viewModel.reconcileAlarmsNow() }
-        )
-    }
-
     // JSON Export / Import Inspector Dialog
     if (navState.showJsonBackupDialog) {
         JsonBackupRestoreDialog(
             initialJson = navState.exportedJsonPreview,
             onDismiss = { viewModel.closeJsonBackupDialog() },
-            onImportJson = { json, replace -> viewModel.importFromJsonString(json, replace) },
+            onImportJson = { json, replace, restoreSettings ->
+                viewModel.importFromJsonString(json, replace, restoreSettings)
+            },
             onCopiedMessage = { viewModel.showMessage("Copied JSON backup to clipboard") }
         )
     }

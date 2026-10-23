@@ -1,8 +1,11 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.AlarmHistoryEntity
 import com.example.data.DateTimeUtils
 import com.example.data.DayFlowDatabase
 import com.example.data.RecurrenceType
@@ -15,6 +18,7 @@ import com.example.data.TaskRepository
 import com.example.data.ThemeMode
 import com.example.data.UserPreferencesRepository
 import com.example.data.UserSettings
+import com.example.notifications.AlarmService
 import com.example.notifications.NotificationDiagnostics
 import com.example.notifications.ReminderScheduler
 import java.time.LocalDate
@@ -79,7 +83,8 @@ data class DayFlowUiState(
     val reminders: List<ReminderEntity> = emptyList(),
     val settings: UserSettings = UserSettings(),
     val navState: FilterAndNavigationState = FilterAndNavigationState(),
-    val diagnostics: NotificationDiagnostics? = null
+    val diagnostics: NotificationDiagnostics? = null,
+    val alarmHistory: List<AlarmHistoryEntity> = emptyList()
 )
 
 class DayFlowViewModel(application: Application) : AndroidViewModel(application) {
@@ -87,7 +92,12 @@ class DayFlowViewModel(application: Application) : AndroidViewModel(application)
     private val database = DayFlowDatabase.getInstance(application)
     private val preferencesRepository = UserPreferencesRepository(application)
     val scheduler = ReminderScheduler(application)
-    val repository = ReminderRepository(database.reminderDao(), scheduler, preferencesRepository)
+    val repository = ReminderRepository(
+        dao = database.reminderDao(),
+        scheduler = scheduler,
+        preferencesRepository = preferencesRepository,
+        taskDao = database.taskDao()
+    )
     val taskRepository = TaskRepository(database.taskDao(), scheduler)
 
     private val navStateFlow = MutableStateFlow(FilterAndNavigationState())
@@ -97,14 +107,16 @@ class DayFlowViewModel(application: Application) : AndroidViewModel(application)
         repository.allRemindersFlow,
         preferencesRepository.settingsFlow,
         navStateFlow,
+        database.alarmHistoryDao().getRecentHistoryFlow(),
         diagnosticsRefreshTrigger
-    ) { reminders, settings, navState, _ ->
+    ) { reminders, settings, navState, history, _ ->
         val diag = scheduler.getDiagnostics(reminders)
         DayFlowUiState(
             reminders = reminders,
             settings = settings,
             navState = navState,
-            diagnostics = diag
+            diagnostics = diag,
+            alarmHistory = history
         )
     }.stateIn(
         scope = viewModelScope,
@@ -125,7 +137,7 @@ class DayFlowViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun selectTab(tab: MainTab) {
-        navStateFlow.update { it.copy(currentTab = tab) }
+        navStateFlow.update { it.copy(currentTab = tab, showDiagnosticsSheet = false) }
     }
 
     fun setCalendarViewMode(mode: CalendarViewMode) {
@@ -344,6 +356,56 @@ class DayFlowViewModel(application: Application) : AndroidViewModel(application)
         refreshDiagnostics()
     }
 
+    fun triggerTestRingingAlarm() {
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val historyEntry = AlarmHistoryEntity(
+                reminderId = 999999L,
+                taskTitle = "Test Ringing Alarm",
+                scheduledEpochMillis = now,
+                actualTriggerEpochMillis = now + 400L,
+                delaySeconds = 0L,
+                isRinging = true,
+                triggerSource = "TEST_ALARM"
+            )
+            try {
+                database.alarmHistoryDao().insert(historyEntry)
+                database.alarmHistoryDao().pruneToLastTen()
+            } catch (_: Exception) {}
+
+            val intent = Intent(app, AlarmService::class.java).apply {
+                action = AlarmService.ACTION_START_ALARM
+                putExtra(AlarmService.EXTRA_REMINDER_ID, 999999L)
+                putExtra(AlarmService.EXTRA_TITLE, "Test Ringing Alarm")
+                putExtra(AlarmService.EXTRA_DESCRIPTION, "Real audible Clock-style task alarm preview")
+                putExtra(AlarmService.EXTRA_SNOOZE_MINUTES, 5)
+            }
+            try {
+                ContextCompat.startForegroundService(app, intent)
+            } catch (_: Exception) {
+                app.startService(intent)
+            }
+            val activityIntent = Intent(app, AlarmActivity::class.java).apply {
+                putExtra(AlarmService.EXTRA_REMINDER_ID, 999999L)
+                putExtra(AlarmService.EXTRA_TITLE, "Test Ringing Alarm")
+                putExtra(AlarmService.EXTRA_DESCRIPTION, "Real audible Clock-style task alarm preview")
+                putExtra(AlarmService.EXTRA_SNOOZE_MINUTES, 5)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            try {
+                app.startActivity(activityIntent)
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun clearAlarmHistory() {
+        viewModelScope.launch {
+            database.alarmHistoryDao().clearAllHistory()
+            showMessage("Cleared alarm ringing history")
+        }
+    }
+
     fun setDiagnosticsSheetOpen(open: Boolean) {
         refreshDiagnostics()
         navStateFlow.update { it.copy(showDiagnosticsSheet = open) }
@@ -362,14 +424,23 @@ class DayFlowViewModel(application: Application) : AndroidViewModel(application)
         navStateFlow.update { it.copy(showJsonBackupDialog = false) }
     }
 
-    fun importFromJsonString(jsonString: String, replaceExisting: Boolean) {
+    fun importFromJsonString(
+        jsonString: String,
+        replaceExisting: Boolean,
+        restoreSettings: Boolean = true
+    ) {
         viewModelScope.launch {
             try {
-                val count = repository.importRemindersFromJson(jsonString, replaceExisting)
+                val summary = repository.importBackupFromJson(
+                    jsonString = jsonString,
+                    replaceExisting = replaceExisting,
+                    restoreSettings = restoreSettings
+                )
+                val settingsSuffix = if (summary.settingsRestored) " & restored settings" else ""
                 navStateFlow.update {
                     it.copy(
                         showJsonBackupDialog = false,
-                        snackbarMessage = "Successfully imported $count reminder(s)"
+                        snackbarMessage = "Imported ${summary.remindersImported} reminder(s)$settingsSuffix"
                     )
                 }
                 refreshDiagnostics()
