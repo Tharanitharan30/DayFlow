@@ -1,11 +1,13 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,16 +20,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,13 +43,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.data.CategoryTagEntity
 import com.example.data.DateTimeUtils
+import com.example.data.DefaultCategoryTags
 import com.example.data.ReminderEntity
 import com.example.notifications.NotificationDiagnostics
+import com.example.ui.components.CategoryFilterChipRow
 import com.example.ui.components.ReminderCard
 import com.example.ui.components.parseHexColor
 import java.time.LocalDate
@@ -56,6 +62,8 @@ import java.util.Locale
 @Composable
 fun DashboardScreen(
     reminders: List<ReminderEntity>,
+    categoryTags: List<CategoryTagEntity> = DefaultCategoryTags.presetEntities(),
+    selectedCategoryLabels: Set<String> = emptySet(),
     use24Hour: Boolean,
     diagnostics: NotificationDiagnostics?,
     onQuickAdd: (String) -> Unit,
@@ -64,6 +72,10 @@ fun DashboardScreen(
     onToggleComplete: (ReminderEntity) -> Unit,
     onSnooze: (ReminderEntity, Int) -> Unit,
     onTogglePauseRecurrence: (ReminderEntity) -> Unit,
+    onToggleCategoryLabel: (String) -> Unit = {},
+    onClearCategories: () -> Unit = {},
+    onCreateCustomTag: (String, String) -> Unit = { _, _ -> },
+    onDeleteCustomTag: (String) -> Unit = {},
     onOpenDiagnostics: () -> Unit,
     onClearCompleted: () -> Unit,
     modifier: Modifier = Modifier
@@ -74,23 +86,32 @@ fun DashboardScreen(
 
     var showCompletedSection by remember { mutableStateOf(false) }
 
-    val overdueTasks = remember(reminders, nowMillis) {
-        reminders.filter { !it.isCompleted && it.effectiveTriggerMillis() < nowMillis }
+    val categoryFilteredReminders = remember(reminders, selectedCategoryLabels) {
+        if (selectedCategoryLabels.isEmpty()) {
+            reminders
+        } else {
+            reminders.filter { it.matchesCategoryFilter(selectedCategoryLabels) }
+        }
+    }
+
+    val overdueTasks = remember(categoryFilteredReminders, nowMillis) {
+        categoryFilteredReminders.filter { !it.isCompleted && it.effectiveTriggerMillis() < nowMillis }
             .sortedBy { it.effectiveTriggerMillis() }
     }
 
-    val todayActiveTasks = remember(reminders, todayStr, nowMillis) {
-        reminders.filter { it.localDateStr == todayStr && !it.isCompleted && it.effectiveTriggerMillis() >= nowMillis }
-            .sortedBy { it.localTimeStr }
+    val todayActiveTasks = remember(categoryFilteredReminders, todayStr, nowMillis) {
+        categoryFilteredReminders.filter {
+            it.localDateStr == todayStr && !it.isCompleted && it.effectiveTriggerMillis() >= nowMillis
+        }.sortedBy { it.localTimeStr }
     }
 
-    val upcomingTasks = remember(reminders, todayStr, nowMillis) {
-        reminders.filter { it.localDateStr > todayStr && !it.isCompleted }
+    val upcomingTasks = remember(categoryFilteredReminders, todayStr) {
+        categoryFilteredReminders.filter { it.localDateStr > todayStr && !it.isCompleted }
             .sortedWith(compareBy<ReminderEntity> { it.localDateStr }.thenBy { it.localTimeStr })
     }
 
-    val completedTasks = remember(reminders) {
-        reminders.filter { it.isCompleted }
+    val completedTasks = remember(categoryFilteredReminders) {
+        categoryFilteredReminders.filter { it.isCompleted }
             .sortedByDescending { it.updatedAtEpochMillis }
     }
 
@@ -108,8 +129,8 @@ fun DashboardScreen(
     }
 
     val next24HoursLimitMillis = nowMillis + (24 * 60 * 60 * 1000L)
-    val next24HoursEvents = remember(reminders, nowMillis, next24HoursLimitMillis) {
-        reminders.filter {
+    val next24HoursEvents = remember(categoryFilteredReminders, nowMillis, next24HoursLimitMillis) {
+        categoryFilteredReminders.filter {
             !it.isCompleted &&
                 it.effectiveTriggerMillis() in nowMillis..next24HoursLimitMillis
         }.sortedBy { it.effectiveTriggerMillis() }
@@ -133,9 +154,9 @@ fun DashboardScreen(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. Lightweight Calm Header
+        // 1. Minimalist Material 3 Header & Outlined Progress Summary Card
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -154,20 +175,28 @@ fun DashboardScreen(
                         )
                     }
 
-                    // Reliability Status Pill
+                    // Outlined Reliability Status Chip
                     Surface(
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(10.dp),
                         color = if (diagnostics?.isFullyOperational == true) {
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
                         } else {
-                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
                         },
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = if (diagnostics?.isFullyOperational == true) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                            } else {
+                                MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
+                            }
+                        ),
                         modifier = Modifier
                             .clickable(onClick = onOpenDiagnostics)
                             .testTag("dashboard_diagnostics_pill")
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
@@ -175,53 +204,77 @@ fun DashboardScreen(
                                 imageVector = if (diagnostics?.isFullyOperational == true) Icons.Default.CheckCircle else Icons.Default.Schedule,
                                 contentDescription = null,
                                 tint = if (diagnostics?.isFullyOperational == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(13.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                             Text(
                                 text = if (diagnostics?.isFullyOperational == true) "Alerts Active" else "Setup Alerts",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = if (diagnostics?.isFullyOperational == true) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (diagnostics?.isFullyOperational == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                             )
                         }
                     }
                 }
 
-                // Inline Compact Progress Bar
+                // Minimalist Outlined Progress Summary Card
                 if (todayAllCount > 0) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                    OutlinedCard(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.outlinedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = "Today's Progress",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "$todayCompletedCount of $todayAllCount completed (${(completionFraction * 100).toInt()}%)",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Today's Focus Progress",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "$todayCompletedCount / $todayAllCount (${(completionFraction * 100).toInt()}%)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            LinearProgressIndicator(
+                                progress = { completionFraction },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant
                             )
                         }
-                        LinearProgressIndicator(
-                            progress = { completionFraction },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp)),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
                     }
                 }
+
+                // Multi-Select Category Filter Bar with Task Counts
+                CategoryFilterChipRow(
+                    reminders = reminders,
+                    categoryTags = categoryTags,
+                    selectedCategoryLabels = selectedCategoryLabels,
+                    onToggleCategoryLabel = onToggleCategoryLabel,
+                    onClearCategories = onClearCategories,
+                    onCreateCustomTag = onCreateCustomTag,
+                    onDeleteCustomTag = onDeleteCustomTag
+                )
             }
         }
 
-        // 2. Compact Next 24h Timeline Strip (if applicable)
+        // 2. Compact Next 24h Outlined Timeline Strip
         if (next24HoursEvents.isNotEmpty()) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -232,16 +285,26 @@ fun DashboardScreen(
                     )
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(next24HoursEvents, key = { "timeline_${it.id}" }) { event ->
-                            Surface(
+                            val catColor = parseHexColor(event.colorHex, MaterialTheme.colorScheme.primary)
+                            OutlinedCard(
                                 shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                colors = CardDefaults.outlinedCardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                ),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                 modifier = Modifier.clickable { onEditReminder(event) }
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(7.dp)
+                                            .clip(CircleShape)
+                                            .background(catColor)
+                                    )
                                     Text(
                                         text = DateTimeUtils.formatDisplayTime(event.localTimeStr, use24Hour),
                                         style = MaterialTheme.typography.labelSmall,
@@ -261,7 +324,7 @@ fun DashboardScreen(
             }
         }
 
-        // 3. Overdue Tasks (Reserving red strictly for overdue)
+        // 3. Overdue Tasks
         if (overdueTasks.isNotEmpty()) {
             item {
                 Row(
@@ -276,8 +339,9 @@ fun DashboardScreen(
                         color = MaterialTheme.colorScheme.error
                     )
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
                     ) {
                         Text(
                             text = "${overdueTasks.size}",
@@ -298,6 +362,7 @@ fun DashboardScreen(
                     onSnooze = { mins -> onSnooze(reminder, mins) },
                     onTogglePauseRecurrence = { onTogglePauseRecurrence(reminder) },
                     onClick = { onEditReminder(reminder) },
+                    onCategoryChipClick = { label -> onToggleCategoryLabel(label) },
                     modifier = Modifier.animateItem(
                         fadeInSpec = tween(durationMillis = 200),
                         placementSpec = spring(
@@ -332,9 +397,12 @@ fun DashboardScreen(
 
         if (todayActiveTasks.isEmpty()) {
             item {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                OutlinedCard(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.outlinedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -349,10 +417,20 @@ fun DashboardScreen(
                             modifier = Modifier.size(20.dp)
                         )
                         Text(
-                            text = "All clear for today. Tap New Task to plan ahead.",
+                            text = if (selectedCategoryLabels.isNotEmpty()) {
+                                "No active tasks today for ${selectedCategoryLabels.joinToString(", ")}."
+                            } else {
+                                "All clear for today. Tap New Task to plan ahead."
+                            },
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
                         )
+                        if (selectedCategoryLabels.isNotEmpty()) {
+                            TextButton(onClick = onClearCategories) {
+                                Text("Show All", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
                     }
                 }
             }
@@ -366,6 +444,7 @@ fun DashboardScreen(
                     onSnooze = { mins -> onSnooze(reminder, mins) },
                     onTogglePauseRecurrence = { onTogglePauseRecurrence(reminder) },
                     onClick = { onEditReminder(reminder) },
+                    onCategoryChipClick = { label -> onToggleCategoryLabel(label) },
                     modifier = Modifier.animateItem(
                         fadeInSpec = tween(durationMillis = 200),
                         placementSpec = spring(
@@ -407,6 +486,7 @@ fun DashboardScreen(
                     onSnooze = { mins -> onSnooze(reminder, mins) },
                     onTogglePauseRecurrence = { onTogglePauseRecurrence(reminder) },
                     onClick = { onEditReminder(reminder) },
+                    onCategoryChipClick = { label -> onToggleCategoryLabel(label) },
                     modifier = Modifier.animateItem(
                         fadeInSpec = tween(durationMillis = 200),
                         placementSpec = spring(
@@ -461,6 +541,7 @@ fun DashboardScreen(
                         onSnooze = { mins -> onSnooze(reminder, mins) },
                         onTogglePauseRecurrence = { onTogglePauseRecurrence(reminder) },
                         onClick = { onEditReminder(reminder) },
+                        onCategoryChipClick = { label -> onToggleCategoryLabel(label) },
                         modifier = Modifier.animateItem(
                             fadeInSpec = tween(durationMillis = 200),
                             placementSpec = spring(

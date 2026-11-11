@@ -9,8 +9,13 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [ReminderEntity::class, Task::class, AlarmHistoryEntity::class],
-    version = 5,
+    entities = [
+        ReminderEntity::class,
+        Task::class,
+        AlarmHistoryEntity::class,
+        CategoryTagEntity::class
+    ],
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(RoomTypeConverters::class)
@@ -18,6 +23,7 @@ abstract class DayFlowDatabase : RoomDatabase() {
     abstract fun reminderDao(): ReminderDao
     abstract fun taskDao(): TaskDao
     abstract fun alarmHistoryDao(): AlarmHistoryDao
+    abstract fun categoryTagDao(): CategoryTagDao
 
     companion object {
         @Volatile
@@ -103,6 +109,29 @@ abstract class DayFlowDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `reminders` ADD COLUMN `customCategoryLabel` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_reminders_customCategoryLabel` ON `reminders` (`customCategoryLabel`)")
+
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `custom_category_label` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_tasks_custom_category_label` ON `tasks` (`custom_category_label`)")
+
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `category_tags` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `color_hex` TEXT NOT NULL,
+                        `is_preset` INTEGER NOT NULL,
+                        `created_at` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_category_tags_name` ON `category_tags` (`name`)")
+            }
+        }
+
         fun getInstance(context: Context): DayFlowDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -110,7 +139,7 @@ abstract class DayFlowDatabase : RoomDatabase() {
                     DayFlowDatabase::class.java,
                     "dayflow_reminders.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .fallbackToDestructiveMigration(dropAllTables = false)
                     .build()
                 INSTANCE = instance

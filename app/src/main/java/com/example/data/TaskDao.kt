@@ -37,6 +37,15 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE category = :category ORDER BY due_date ASC")
     fun observeTasksByCategory(category: ReminderCategory): Flow<List<Task>>
 
+    @Query("SELECT * FROM tasks WHERE category IN (:categories) ORDER BY due_date ASC")
+    fun observeTasksByCategories(categories: List<ReminderCategory>): Flow<List<Task>>
+
+    @Query("SELECT * FROM tasks WHERE LOWER(custom_category_label) = LOWER(:label) ORDER BY due_date ASC")
+    fun observeTasksByCustomLabel(label: String): Flow<List<Task>>
+
+    @Query("UPDATE tasks SET custom_category_label = '' WHERE LOWER(custom_category_label) = LOWER(:label)")
+    suspend fun clearCustomCategoryLabel(label: String)
+
     @Query("SELECT * FROM tasks WHERE priority = :priority ORDER BY due_date ASC")
     fun observeTasksByPriority(priority: ReminderPriority): Flow<List<Task>>
 

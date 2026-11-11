@@ -6,8 +6,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AlarmHistoryEntity
+import com.example.data.CategoryTagEntity
 import com.example.data.DateTimeUtils
 import com.example.data.DayFlowDatabase
+import com.example.data.DefaultCategoryTags
 import com.example.data.RecurrenceType
 import com.example.data.RecurringEditScope
 import com.example.data.ReminderCategory
@@ -68,6 +70,7 @@ data class FilterAndNavigationState(
     val selectedDateStr: String = DateTimeUtils.formatLocalDate(LocalDate.now()),
     val searchQuery: String = "",
     val selectedCategory: ReminderCategory? = null,
+    val selectedCategoryLabels: Set<String> = emptySet(),
     val selectedPriority: ReminderPriority? = null,
     val statusFilter: TaskStatusFilter = TaskStatusFilter.ALL,
     val sortOrder: TaskSortOrder = TaskSortOrder.SCHEDULED_TIME,
@@ -81,6 +84,7 @@ data class FilterAndNavigationState(
 
 data class DayFlowUiState(
     val reminders: List<ReminderEntity> = emptyList(),
+    val categoryTags: List<CategoryTagEntity> = DefaultCategoryTags.presetEntities(),
     val settings: UserSettings = UserSettings(),
     val navState: FilterAndNavigationState = FilterAndNavigationState(),
     val diagnostics: NotificationDiagnostics? = null,
@@ -96,7 +100,8 @@ class DayFlowViewModel(application: Application) : AndroidViewModel(application)
         dao = database.reminderDao(),
         scheduler = scheduler,
         preferencesRepository = preferencesRepository,
-        taskDao = database.taskDao()
+        taskDao = database.taskDao(),
+        categoryTagDao = database.categoryTagDao()
     )
     val taskRepository = TaskRepository(database.taskDao(), scheduler)
 
@@ -105,14 +110,19 @@ class DayFlowViewModel(application: Application) : AndroidViewModel(application)
 
     val uiState: StateFlow<DayFlowUiState> = combine(
         repository.allRemindersFlow,
+        repository.categoryTagsFlow,
         preferencesRepository.settingsFlow,
         navStateFlow,
-        database.alarmHistoryDao().getRecentHistoryFlow(),
-        diagnosticsRefreshTrigger
-    ) { reminders, settings, navState, history, _ ->
+        combine(
+            database.alarmHistoryDao().getRecentHistoryFlow(),
+            diagnosticsRefreshTrigger
+        ) { history, trigger -> history to trigger }
+    ) { reminders, rawTags, settings, navState, (history, _) ->
         val diag = scheduler.getDiagnostics(reminders)
+        val mergedTags = if (rawTags.isEmpty()) DefaultCategoryTags.presetEntities() else rawTags
         DayFlowUiState(
             reminders = reminders,
+            categoryTags = mergedTags,
             settings = settings,
             navState = navState,
             diagnostics = diag,
@@ -126,6 +136,7 @@ class DayFlowViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         viewModelScope.launch {
+            repository.ensurePresetCategoriesSeeded()
             repository.ensureInitialSampleDataIfNeeded()
             repository.reconcileAllRemindersWithSystemClock(ZoneId.systemDefault())
             refreshDiagnostics()
@@ -153,7 +164,78 @@ class DayFlowViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun selectCategoryFilter(category: ReminderCategory?) {
-        navStateFlow.update { it.copy(selectedCategory = category) }
+        navStateFlow.update {
+            it.copy(
+                selectedCategory = category,
+                selectedCategoryLabels = if (category != null) setOf(category.shortLabel) else emptySet()
+            )
+        }
+    }
+
+    fun toggleCategoryLabelFilter(label: String) {
+        val clean = label.trim()
+        if (clean.isEmpty()) return
+        navStateFlow.update { current ->
+            val existingMatch = current.selectedCategoryLabels.firstOrNull {
+                it.equals(clean, ignoreCase = true)
+            }
+            val updatedSet = if (existingMatch != null) {
+                current.selectedCategoryLabels - existingMatch
+            } else {
+                current.selectedCategoryLabels + clean
+            }
+            val singlePreset = if (updatedSet.size == 1) {
+                val singleLabel = updatedSet.first()
+                ReminderCategory.entries.firstOrNull {
+                    it.shortLabel.equals(singleLabel, ignoreCase = true) ||
+                        it.name.equals(singleLabel, ignoreCase = true)
+                }
+            } else {
+                null
+            }
+            current.copy(
+                selectedCategoryLabels = updatedSet,
+                selectedCategory = singlePreset
+            )
+        }
+    }
+
+    fun clearCategoryFilters() {
+        navStateFlow.update {
+            it.copy(
+                selectedCategory = null,
+                selectedCategoryLabels = emptySet()
+            )
+        }
+    }
+
+    fun createCustomCategoryTag(name: String, colorHex: String) {
+        val clean = name.trim()
+        if (clean.isEmpty()) {
+            showMessage("Please enter a category label name.")
+            return
+        }
+        viewModelScope.launch {
+            val created = repository.createCustomCategoryTag(clean, colorHex)
+            if (created != null) {
+                showMessage("Saved category label \"${created.name}\"")
+            }
+        }
+    }
+
+    fun deleteCustomCategoryTag(name: String) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return
+        viewModelScope.launch {
+            repository.deleteCustomCategoryTag(clean)
+            navStateFlow.update { current ->
+                val remaining = current.selectedCategoryLabels.filterNot {
+                    it.equals(clean, ignoreCase = true)
+                }.toSet()
+                current.copy(selectedCategoryLabels = remaining)
+            }
+            showMessage("Removed custom label \"$clean\"")
+        }
     }
 
     fun selectPriorityFilter(priority: ReminderPriority?) {
@@ -173,6 +255,7 @@ class DayFlowViewModel(application: Application) : AndroidViewModel(application)
             it.copy(
                 searchQuery = "",
                 selectedCategory = null,
+                selectedCategoryLabels = emptySet(),
                 selectedPriority = null,
                 statusFilter = TaskStatusFilter.ALL
             )

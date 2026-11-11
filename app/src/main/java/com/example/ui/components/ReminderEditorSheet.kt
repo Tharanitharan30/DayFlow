@@ -69,7 +69,18 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.ui.draw.clip
+import com.example.data.CategoryTagEntity
 import com.example.data.DateTimeUtils
+import com.example.data.DefaultCategoryTags
 import com.example.data.RecurrenceType
 import com.example.data.RecurringEditScope
 import com.example.data.ReminderCategory
@@ -95,6 +106,9 @@ private val AdvanceAlertOptions = listOf(
 fun ReminderEditorSheet(
     initialReminder: ReminderEntity,
     use24Hour: Boolean,
+    categoryTags: List<CategoryTagEntity> = DefaultCategoryTags.presetEntities(),
+    onCreateCustomTag: (String, String) -> Unit = { _, _ -> },
+    onDeleteCustomTag: (String) -> Unit = {},
     onDismiss: () -> Unit,
     onSave: (ReminderEntity, RecurringEditScope) -> Unit,
     onDelete: (ReminderEntity, Boolean) -> Unit
@@ -107,6 +121,13 @@ fun ReminderEditorSheet(
     var localDateStr by remember(initialReminder) { mutableStateOf(initialReminder.localDateStr) }
     var localTimeStr by remember(initialReminder) { mutableStateOf(initialReminder.localTimeStr) }
     var category by remember(initialReminder) { mutableStateOf(initialReminder.category) }
+    var customCategoryLabel by remember(initialReminder) {
+        mutableStateOf(initialReminder.customCategoryLabel)
+    }
+    var selectedColorHex by remember(initialReminder) {
+        mutableStateOf(initialReminder.colorHex.ifBlank { initialReminder.category.defaultColorHex })
+    }
+    var showCreateCategoryDialog by remember { mutableStateOf(false) }
     var priority by remember(initialReminder) { mutableStateOf(initialReminder.priority) }
     var recurrenceType by remember(initialReminder) { mutableStateOf(initialReminder.recurrenceType) }
     var recurrenceInterval by remember(initialReminder) {
@@ -313,25 +334,130 @@ fun ReminderEditorSheet(
                 }
             }
 
-            // 4. Category Selection
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = "Category",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            // 4. Category & Custom Room Label Selection
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Category Label",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = customCategoryLabel.ifBlank { category.shortLabel },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = parseHexColor(selectedColorHex, MaterialTheme.colorScheme.primary)
+                    )
+                }
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // Preset categories
                     ReminderCategory.entries.forEach { cat ->
+                        val isSelected = customCategoryLabel.isBlank() && category == cat
+                        val catColor = parseHexColor(cat.defaultColorHex, MaterialTheme.colorScheme.primary)
                         FilterChip(
-                            selected = category == cat,
-                            onClick = { category = cat },
-                            label = { Text(cat.label) },
+                            selected = isSelected,
+                            onClick = {
+                                category = cat
+                                customCategoryLabel = ""
+                                selectedColorHex = cat.defaultColorHex
+                            },
+                            label = { Text(cat.shortLabel) },
+                            leadingIcon = {
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = catColor,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(catColor)
+                                    )
+                                }
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = catColor.copy(alpha = 0.14f)
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                selectedBorderColor = catColor.copy(alpha = 0.65f)
+                            ),
                             modifier = Modifier.testTag("editor_cat_${cat.name.lowercase()}")
                         )
                     }
+
+                    // Custom Room-saved category labels
+                    val customTags = categoryTags.filter { !it.isPreset }
+                    customTags.forEach { customTag ->
+                        val isSelected = customCategoryLabel.equals(customTag.name, ignoreCase = true)
+                        val tagColor = parseHexColor(customTag.colorHex, MaterialTheme.colorScheme.primary)
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                customCategoryLabel = customTag.name
+                                selectedColorHex = customTag.colorHex
+                            },
+                            label = { Text(customTag.name) },
+                            leadingIcon = {
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = tagColor,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(tagColor)
+                                    )
+                                }
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = tagColor.copy(alpha = 0.14f)
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                selectedBorderColor = tagColor.copy(alpha = 0.65f)
+                            ),
+                            modifier = Modifier.testTag("editor_custom_cat_${customTag.name.lowercase()}")
+                        )
+                    }
+
+                    // "+ New Label" button
+                    AssistChip(
+                        onClick = { showCreateCategoryDialog = true },
+                        label = { Text("New Label") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Create Custom Label",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        border = AssistChipDefaults.assistChipBorder(
+                            enabled = true,
+                            borderColor = MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        modifier = Modifier.testTag("editor_new_label_button")
+                    )
                 }
             }
 
@@ -704,6 +830,8 @@ fun ReminderEditorSheet(
                             localTimeStr = localTimeStr,
                             scheduledEpochMillis = computedEpoch,
                             category = category,
+                            customCategoryLabel = customCategoryLabel.trim(),
+                            colorHex = selectedColorHex.ifBlank { category.defaultColorHex },
                             priority = priority,
                             recurrenceType = recurrenceType,
                             recurrenceInterval = recurrenceInterval,
@@ -732,6 +860,36 @@ fun ReminderEditorSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+
+    if (showCreateCategoryDialog) {
+        CreateCategoryTagDialog(
+            existingTags = categoryTags,
+            onDismiss = { showCreateCategoryDialog = false },
+            onCreateTag = { newLabel, newHex ->
+                onCreateCustomTag(newLabel, newHex)
+                val matchingPreset = ReminderCategory.entries.firstOrNull {
+                    it.shortLabel.equals(newLabel, ignoreCase = true) ||
+                        it.name.equals(newLabel, ignoreCase = true)
+                }
+                if (matchingPreset != null) {
+                    category = matchingPreset
+                    customCategoryLabel = ""
+                    selectedColorHex = matchingPreset.defaultColorHex
+                } else {
+                    customCategoryLabel = newLabel.trim()
+                    selectedColorHex = newHex
+                }
+                showCreateCategoryDialog = false
+            },
+            onDeleteCustomTag = { removedName ->
+                onDeleteCustomTag(removedName)
+                if (customCategoryLabel.equals(removedName, ignoreCase = true)) {
+                    customCategoryLabel = ""
+                    selectedColorHex = category.defaultColorHex
+                }
+            }
+        )
     }
 
     // Material 3 DatePickerDialog

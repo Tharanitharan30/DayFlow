@@ -7,6 +7,7 @@ import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -20,15 +21,56 @@ class ReminderRepository(
     private val dao: ReminderDao,
     private val scheduler: ReminderScheduler,
     private val preferencesRepository: UserPreferencesRepository,
-    private val taskDao: TaskDao? = null
+    private val taskDao: TaskDao? = null,
+    private val categoryTagDao: CategoryTagDao? = null
 ) {
     val allRemindersFlow: Flow<List<ReminderEntity>> = dao.observeAllReminders()
+    val categoryTagsFlow: Flow<List<CategoryTagEntity>> =
+        categoryTagDao?.observeAllTags() ?: flowOf(DefaultCategoryTags.presetEntities())
+
+    fun observeRemindersByCategory(category: ReminderCategory): Flow<List<ReminderEntity>> =
+        dao.observeRemindersByCategory(category)
+
+    fun observeRemindersByCategories(categories: List<ReminderCategory>): Flow<List<ReminderEntity>> =
+        dao.observeRemindersByCategories(categories)
+
+    fun observeRemindersByCustomLabel(label: String): Flow<List<ReminderEntity>> =
+        dao.observeRemindersByCustomLabel(label)
+
+    suspend fun ensurePresetCategoriesSeeded() {
+        categoryTagDao?.insertTags(DefaultCategoryTags.presetEntities())
+    }
+
+    suspend fun createCustomCategoryTag(name: String, colorHex: String): CategoryTagEntity? {
+        val cleanName = name.trim()
+        if (cleanName.isEmpty()) return null
+        ensurePresetCategoriesSeeded()
+        val existing = categoryTagDao?.getTagByNameSync(cleanName)
+        if (existing != null) return existing
+        val entity = CategoryTagEntity(
+            name = cleanName,
+            colorHex = colorHex.ifBlank { "#0284C7" },
+            isPreset = false,
+            createdAt = System.currentTimeMillis()
+        )
+        val newId = categoryTagDao?.insertTag(entity) ?: 0L
+        return entity.copy(id = newId)
+    }
+
+    suspend fun deleteCustomCategoryTag(name: String) {
+        val cleanName = name.trim()
+        if (cleanName.isEmpty()) return
+        categoryTagDao?.deleteCustomTagByName(cleanName)
+        dao.clearCustomCategoryLabel(cleanName)
+        taskDao?.clearCustomCategoryLabel(cleanName)
+    }
 
     /**
      * Seeds realistic, helpful initial reminders on first launch so the user can explore
      * today's tasks, overdue items, upcoming timeline, and recurring tasks immediately.
      */
     suspend fun ensureInitialSampleDataIfNeeded() {
+        ensurePresetCategoriesSeeded()
         val alreadySeeded = preferencesRepository.isInitialSeedDoneFlow.first()
         if (alreadySeeded) return
         val existingCount = dao.getReminderCountSync()
@@ -86,6 +128,24 @@ class ReminderRepository(
                 advanceAlertOffsetsMinutes = "0,10"
             ),
             ReminderEntity(
+                title = "Submit Q4 Production Sign-Off Report",
+                description = "Final review of release checklist and security audit before deployment cutoff.",
+                localDateStr = DateTimeUtils.formatLocalDate(today),
+                localTimeStr = DateTimeUtils.formatLocalTime(nowTime.plusHours(3).withMinute(30)),
+                timezoneId = zone.id,
+                scheduledEpochMillis = DateTimeUtils.computeEpochMillis(
+                    DateTimeUtils.formatLocalDate(today),
+                    DateTimeUtils.formatLocalTime(nowTime.plusHours(3).withMinute(30)),
+                    zone
+                ),
+                category = ReminderCategory.URGENT,
+                colorHex = ReminderCategory.URGENT.defaultColorHex,
+                priority = ReminderPriority.HIGH,
+                recurrenceType = RecurrenceType.NONE,
+                isRingingAlarm = true,
+                advanceAlertOffsetsMinutes = "0,15"
+            ),
+            ReminderEntity(
                 title = "Evening Digital Sunset & Plan Tomorrow",
                 description = "Review completed tasks in DayFlow, capture open loops, and set alarm for tomorrow.",
                 localDateStr = DateTimeUtils.formatLocalDate(today),
@@ -96,8 +156,8 @@ class ReminderRepository(
                     eveningTimeStr,
                     zone
                 ),
-                category = ReminderCategory.HABIT,
-                colorHex = ReminderCategory.HABIT.defaultColorHex,
+                category = ReminderCategory.PERSONAL,
+                colorHex = ReminderCategory.PERSONAL.defaultColorHex,
                 priority = ReminderPriority.LOW,
                 recurrenceType = RecurrenceType.DAILY,
                 recurrenceInterval = 1,
@@ -149,6 +209,10 @@ class ReminderRepository(
             updatedAtEpochMillis = now
         )
 
+        if (normalized.customCategoryLabel.isNotBlank()) {
+            createCustomCategoryTag(normalized.customCategoryLabel, normalized.colorHex)
+        }
+
         if (normalized.id == 0L) {
             val newId = dao.insertReminder(normalized.copy(createdAtEpochMillis = now))
             val saved = normalized.copy(id = newId, createdAtEpochMillis = now)
@@ -171,6 +235,7 @@ class ReminderRepository(
                     timezoneId = zone.id,
                     scheduledEpochMillis = updatedOtherEpoch,
                     category = normalized.category,
+                    customCategoryLabel = normalized.customCategoryLabel,
                     colorHex = normalized.colorHex,
                     priority = normalized.priority,
                     recurrenceType = normalized.recurrenceType,
@@ -368,6 +433,7 @@ class ReminderRepository(
                 put("timezoneId", r.timezoneId)
                 put("scheduledEpochMillis", r.scheduledEpochMillis)
                 put("category", r.category.name)
+                put("customCategoryLabel", r.customCategoryLabel)
                 put("colorHex", r.colorHex)
                 put("priority", r.priority.name)
                 put("recurrenceType", r.recurrenceType.name)
@@ -486,6 +552,7 @@ class ReminderRepository(
                     timezoneId = zone.id,
                     scheduledEpochMillis = DateTimeUtils.computeEpochMillis(localDateStr, localTimeStr, zone),
                     category = category,
+                    customCategoryLabel = obj.optString("customCategoryLabel", ""),
                     colorHex = obj.optString("colorHex", category.defaultColorHex),
                     priority = priority,
                     recurrenceType = recurrenceType,

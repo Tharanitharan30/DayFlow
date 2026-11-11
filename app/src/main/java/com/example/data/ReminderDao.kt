@@ -12,6 +12,18 @@ interface ReminderDao {
     @Query("SELECT * FROM reminders ORDER BY isCompleted ASC, scheduledEpochMillis ASC")
     fun observeAllReminders(): Flow<List<ReminderEntity>>
 
+    @Query("SELECT * FROM reminders WHERE category = :category ORDER BY isCompleted ASC, scheduledEpochMillis ASC")
+    fun observeRemindersByCategory(category: ReminderCategory): Flow<List<ReminderEntity>>
+
+    @Query("SELECT * FROM reminders WHERE category IN (:categories) ORDER BY isCompleted ASC, scheduledEpochMillis ASC")
+    fun observeRemindersByCategories(categories: List<ReminderCategory>): Flow<List<ReminderEntity>>
+
+    @Query("SELECT * FROM reminders WHERE LOWER(customCategoryLabel) = LOWER(:label) ORDER BY isCompleted ASC, scheduledEpochMillis ASC")
+    fun observeRemindersByCustomLabel(label: String): Flow<List<ReminderEntity>>
+
+    @Query("UPDATE reminders SET customCategoryLabel = '' WHERE LOWER(customCategoryLabel) = LOWER(:label)")
+    suspend fun clearCustomCategoryLabel(label: String)
+
     @Query("SELECT * FROM reminders ORDER BY scheduledEpochMillis ASC")
     suspend fun getAllRemindersSync(): List<ReminderEntity>
 

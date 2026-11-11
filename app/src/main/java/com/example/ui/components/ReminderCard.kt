@@ -13,6 +13,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,10 +27,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Snooze
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -36,6 +38,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -95,10 +98,11 @@ fun priorityColor(priority: ReminderPriority): Color = when (priority) {
 }
 
 /**
- * Lightweight, border-minimal task item with clean single-line metadata.
- * Strips heavy color bars and stacked pills for optimal scannability and fast rendering.
+ * Minimalist Google Material 3 OutlinedCard for Task & Reminder items.
+ * Features a crisp 1dp border, semantic category chip with color dot, priority pill,
+ * and ringing-alarm status indicator.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ReminderCard(
     reminder: ReminderEntity,
@@ -108,6 +112,7 @@ fun ReminderCard(
     onSnooze: (Int) -> Unit,
     onTogglePauseRecurrence: () -> Unit,
     onClick: () -> Unit,
+    onCategoryChipClick: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showSnoozeMenu by remember { mutableStateOf(false) }
@@ -151,11 +156,13 @@ fun ReminderCard(
     val visualCompleted = reminder.isCompleted || isCompletingAnim
     val isOverdue = !visualCompleted && reminder.effectiveTriggerMillis() < nowMillis
     val prioColor = priorityColor(reminder.priority)
+    val categoryColor = parseHexColor(reminder.colorHex, parseHexColor(reminder.category.defaultColorHex))
+    val categoryLabel = reminder.effectiveCategoryLabel()
 
     val containerColor by animateColorAsState(
         targetValue = when {
-            visualCompleted -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-            isOverdue -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.18f)
+            visualCompleted -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+            isOverdue -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.12f)
             else -> MaterialTheme.colorScheme.surface
         },
         animationSpec = tween(durationMillis = 200),
@@ -164,9 +171,9 @@ fun ReminderCard(
 
     val borderColor by animateColorAsState(
         targetValue = when {
-            visualCompleted -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-            isOverdue -> MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
-            else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+            visualCompleted -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+            isOverdue -> MaterialTheme.colorScheme.error.copy(alpha = 0.45f)
+            else -> MaterialTheme.colorScheme.outlineVariant
         },
         animationSpec = tween(durationMillis = 200),
         label = "borderColor"
@@ -174,7 +181,7 @@ fun ReminderCard(
 
     val titleTextColor by animateColorAsState(
         targetValue = if (visualCompleted) {
-            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         } else {
             MaterialTheme.colorScheme.onSurface
         },
@@ -233,8 +240,8 @@ fun ReminderCard(
             val direction = dismissState.dismissDirection
             val bgColor by animateColorAsState(
                 targetValue = when (direction) {
-                    SwipeToDismissBoxValue.StartToEnd -> CompletedSuccessColor.copy(alpha = 0.16f)
-                    SwipeToDismissBoxValue.EndToStart -> SnoozeAccentColor.copy(alpha = 0.16f)
+                    SwipeToDismissBoxValue.StartToEnd -> CompletedSuccessColor.copy(alpha = 0.14f)
+                    SwipeToDismissBoxValue.EndToStart -> SnoozeAccentColor.copy(alpha = 0.14f)
                     SwipeToDismissBoxValue.Settled -> Color.Transparent
                 },
                 label = "swipeBgColor"
@@ -242,7 +249,7 @@ fun ReminderCard(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(14.dp))
                     .background(bgColor)
                     .padding(horizontal = 16.dp),
                 contentAlignment = when (direction) {
@@ -297,21 +304,20 @@ fun ReminderCard(
                 scaleY = scale
             }
     ) {
-        Card(
+        OutlinedCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("reminder_card_${reminder.id}")
                 .clickable(onClick = onClick),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = containerColor),
-            border = BorderStroke(1.dp, borderColor),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.outlinedCardColors(containerColor = containerColor),
+            border = BorderStroke(1.dp, borderColor)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.Top
             ) {
                 // Accessible Checkbox
                 Box(
@@ -325,14 +331,14 @@ fun ReminderCard(
                     Box(
                         modifier = Modifier
                             .scale(checkScale)
-                            .size(20.dp)
+                            .size(22.dp)
                             .clip(CircleShape)
                             .background(
                                 if (visualCompleted) CompletedSuccessColor else Color.Transparent
                             )
                             .border(
                                 width = 1.75.dp,
-                                color = if (visualCompleted) CompletedSuccessColor else prioColor,
+                                color = if (visualCompleted) CompletedSuccessColor else categoryColor,
                                 shape = CircleShape
                             ),
                         contentAlignment = Alignment.Center
@@ -342,23 +348,23 @@ fun ReminderCard(
                                 imageVector = Icons.Default.Check,
                                 contentDescription = "Completed",
                                 tint = Color.White,
-                                modifier = Modifier.size(13.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-                // Content Column: Title + Single-Line Metadata
+                // Content Column: Title + Optional Description + Outlined M3 Chips Row
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
                         text = reminder.title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (visualCompleted) FontWeight.Normal else FontWeight.Medium,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = if (visualCompleted) FontWeight.Normal else FontWeight.SemiBold,
                         color = titleTextColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -386,62 +392,154 @@ fun ReminderCard(
                             }
                     )
 
-                    // Single-line compact metadata subtitle: [Alarm] 10:30 AM • Work • 🔁
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    if (reminder.description.isNotBlank() && !visualCompleted) {
+                        Text(
+                            text = reminder.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    // Minimalist M3 Outlined Chips & Metadata Row
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        // 1. Outlined Category Tag Chip
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = categoryColor.copy(alpha = 0.10f),
+                            border = BorderStroke(1.dp, categoryColor.copy(alpha = 0.35f)),
+                            modifier = Modifier
+                                .testTag("card_category_chip_${reminder.id}")
+                                .let { mod ->
+                                    if (onCategoryChipClick != null) {
+                                        mod.clickable { onCategoryChipClick(categoryLabel) }
+                                    } else {
+                                        mod
+                                    }
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(categoryColor)
+                                )
+                                Text(
+                                    text = categoryLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = categoryColor
+                                )
+                            }
+                        }
+
+                        // 2. Date & Time Chip
                         val displayTime = DateTimeUtils.formatDisplayTime(reminder.localTimeStr, use24Hour)
                         val friendlyDate = DateTimeUtils.formatFriendlyDate(reminder.localDateStr)
-
-                        Icon(
-                            imageVector = Icons.Default.Alarm,
-                            contentDescription = null,
-                            tint = if (isOverdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Text(
-                            text = if (isOverdue) "Overdue • $friendlyDate, $displayTime" else "$friendlyDate, $displayTime",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (isOverdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        Text(
-                            text = "•",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outlineVariant
-                        )
-
-                        Text(
-                            text = reminder.category.label,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        if (reminder.isRecurring) {
-                            Text(
-                                text = "•",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outlineVariant
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isOverdue) {
+                                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                            },
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = if (isOverdue) {
+                                    MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
+                                } else {
+                                    MaterialTheme.colorScheme.outlineVariant
+                                }
                             )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (reminder.isRingingAlarm) Icons.Default.Alarm else Icons.Default.NotificationsActive,
+                                    contentDescription = null,
+                                    tint = if (isOverdue) {
+                                        MaterialTheme.colorScheme.error
+                                    } else if (reminder.isRingingAlarm) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = if (isOverdue) "Overdue • $friendlyDate, $displayTime" else "$friendlyDate, $displayTime",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isOverdue) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+
+                        // 3. Ringing Alarm Mode Pill (when enabled)
+                        if (reminder.isRingingAlarm && !visualCompleted) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                            ) {
+                                Text(
+                                    text = "Ringing",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+
+                        // 4. Priority Badge (High / Medium)
+                        if (reminder.priority != ReminderPriority.LOW) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = prioColor.copy(alpha = 0.10f),
+                                border = BorderStroke(1.dp, prioColor.copy(alpha = 0.35f))
+                            ) {
+                                Text(
+                                    text = reminder.priority.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = prioColor,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+
+                        // 5. Recurring / Snoozed / Muted indicators
+                        if (reminder.isRecurring) {
                             Icon(
                                 imageVector = Icons.Default.Repeat,
                                 contentDescription = "Recurring",
                                 tint = if (reminder.isRecurrencePaused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(11.dp)
+                                modifier = Modifier.size(13.dp)
                             )
                         }
 
                         val snoozedUntil = reminder.snoozedUntilEpochMillis
                         if (snoozedUntil != null && snoozedUntil > nowMillis && !visualCompleted) {
                             Text(
-                                text = "•",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outlineVariant
-                            )
-                            Text(
                                 text = "Snoozed",
                                 style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
                                 color = SnoozeAccentColor
                             )
                         }
@@ -451,26 +549,9 @@ fun ReminderCard(
                                 imageVector = Icons.Default.NotificationsOff,
                                 contentDescription = "Muted",
                                 tint = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.size(11.dp)
+                                modifier = Modifier.size(13.dp)
                             )
                         }
-                    }
-                }
-
-                // Priority Badge (only if High or Medium to avoid visual clutter)
-                if (reminder.priority != ReminderPriority.LOW) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Surface(
-                        color = prioColor.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(4.dp)
-                    ) {
-                        Text(
-                            text = reminder.priority.label,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = prioColor,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
                     }
                 }
 
@@ -480,13 +561,13 @@ fun ReminderCard(
                         IconButton(
                             onClick = { showSnoozeMenu = true },
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(38.dp)
                                 .testTag("snooze_button_${reminder.id}")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Snooze,
                                 contentDescription = "Snooze",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                                 modifier = Modifier.size(18.dp)
                             )
                         }

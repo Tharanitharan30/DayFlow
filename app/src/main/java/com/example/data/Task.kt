@@ -26,6 +26,7 @@ import java.util.UUID
     indices = [
         Index(value = ["due_date"]),
         Index(value = ["category"]),
+        Index(value = ["custom_category_label"]),
         Index(value = ["priority"]),
         Index(value = ["is_completed"]),
         Index(value = ["series_id"])
@@ -47,6 +48,9 @@ data class Task(
 
     @ColumnInfo(name = "category")
     val category: ReminderCategory = ReminderCategory.PERSONAL,
+
+    @ColumnInfo(name = "custom_category_label")
+    val customCategoryLabel: String = "",
 
     @ColumnInfo(name = "priority")
     val priority: ReminderPriority = ReminderPriority.MEDIUM,
@@ -144,6 +148,7 @@ data class Task(
         description = description,
         dueDate = dueDate,
         category = parseCategory(category),
+        customCategoryLabel = if (isPresetCategoryString(category)) "" else category.trim(),
         priority = parsePriority(priority),
         isCompleted = isCompleted,
         recurrenceRule = recurrenceRule
@@ -152,6 +157,10 @@ data class Task(
     val isRecurring: Boolean
         get() = recurrenceType != RecurrenceType.NONE ||
             (recurrenceRule.isNotBlank() && !recurrenceRule.equals("NONE", ignoreCase = true))
+
+    fun effectiveCategoryLabel(): String {
+        return customCategoryLabel.trim().ifEmpty { category.shortLabel }
+    }
 
     fun toReminderEntity(): ReminderEntity {
         return ReminderEntity(
@@ -163,6 +172,7 @@ data class Task(
             localTimeStr = localTimeStr,
             scheduledEpochMillis = dueDate,
             category = category,
+            customCategoryLabel = customCategoryLabel,
             colorHex = colorHex,
             priority = priority,
             recurrenceType = recurrenceType,
@@ -184,12 +194,17 @@ data class Task(
     }
 
     companion object {
-        fun parseCategory(value: String): ReminderCategory =
-            try {
-                ReminderCategory.valueOf(value.trim().uppercase())
-            } catch (_: Exception) {
-                ReminderCategory.PERSONAL
+        fun isPresetCategoryString(value: String): Boolean {
+            val trimmed = value.trim()
+            return ReminderCategory.entries.any {
+                it.name.equals(trimmed, ignoreCase = true) ||
+                    it.shortLabel.equals(trimmed, ignoreCase = true) ||
+                    it.label.equals(trimmed, ignoreCase = true)
             }
+        }
+
+        fun parseCategory(value: String): ReminderCategory =
+            ReminderCategory.fromLabelOrName(value)
 
         fun parsePriority(value: String): ReminderPriority =
             try {
@@ -256,6 +271,7 @@ data class Task(
                 description = entity.description,
                 dueDate = entity.scheduledEpochMillis,
                 category = entity.category,
+                customCategoryLabel = entity.customCategoryLabel,
                 priority = entity.priority,
                 isCompleted = entity.isCompleted,
                 recurrenceRule = ruleStr,

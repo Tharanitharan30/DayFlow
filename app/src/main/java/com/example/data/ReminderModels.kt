@@ -14,13 +14,30 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
 
-enum class ReminderCategory(val label: String, val defaultColorHex: String) {
-    WORK("Work & Deep Focus", "#0A6670"),
-    PERSONAL("Personal & Life", "#4338CA"),
-    HEALTH("Health & Wellness", "#10B981"),
-    FINANCE("Bills & Finance", "#D97706"),
-    ERRANDS("Errands & Shopping", "#EC4899"),
-    HABIT("Daily Ritual", "#8B5CF6")
+enum class ReminderCategory(
+    val label: String,
+    val defaultColorHex: String,
+    val shortLabel: String = label
+) {
+    WORK("Work & Deep Focus", "#0D9488", "Work"),
+    PERSONAL("Personal & Life", "#4F46E5", "Personal"),
+    URGENT("Urgent", "#E11D48", "Urgent"),
+    HEALTH("Health & Wellness", "#10B981", "Health"),
+    FINANCE("Bills & Finance", "#D97706", "Finance"),
+    ERRANDS("Errands & Shopping", "#EC4899", "Errands"),
+    HABIT("Daily Ritual", "#8B5CF6", "Habit");
+
+    companion object {
+        fun fromLabelOrName(value: String): ReminderCategory {
+            val trimmed = value.trim()
+            if (trimmed.isEmpty()) return PERSONAL
+            return entries.firstOrNull {
+                it.name.equals(trimmed, ignoreCase = true) ||
+                    it.shortLabel.equals(trimmed, ignoreCase = true) ||
+                    it.label.equals(trimmed, ignoreCase = true)
+            } ?: PERSONAL
+        }
+    }
 }
 
 enum class ReminderPriority(val label: String, val sortOrder: Int) {
@@ -58,6 +75,7 @@ enum class ThemeMode(val label: String) {
         Index(value = ["isCompleted"]),
         Index(value = ["localDateStr"]),
         Index(value = ["category"]),
+        Index(value = ["customCategoryLabel"]),
         Index(value = ["priority"])
     ]
 )
@@ -76,6 +94,8 @@ data class ReminderEntity(
     /** Computed epoch milliseconds corresponding to localDateStr + localTimeStr in timezoneId */
     val scheduledEpochMillis: Long,
     val category: ReminderCategory = ReminderCategory.PERSONAL,
+    /** Optional custom Room-saved category tag label; when blank, uses category.shortLabel */
+    val customCategoryLabel: String = "",
     val colorHex: String = category.defaultColorHex,
     val priority: ReminderPriority = ReminderPriority.MEDIUM,
     val recurrenceType: RecurrenceType = RecurrenceType.NONE,
@@ -107,6 +127,21 @@ data class ReminderEntity(
     val isRecurring: Boolean
         get() = recurrenceType != RecurrenceType.NONE
 
+    fun effectiveCategoryLabel(): String {
+        return customCategoryLabel.trim().ifEmpty { category.shortLabel }
+    }
+
+    fun matchesCategoryFilter(filterLabels: Set<String>): Boolean {
+        if (filterLabels.isEmpty()) return true
+        val effective = effectiveCategoryLabel()
+        return filterLabels.any { label ->
+            label.equals(effective, ignoreCase = true) ||
+                label.equals(category.name, ignoreCase = true) ||
+                label.equals(category.shortLabel, ignoreCase = true) ||
+                label.equals(category.label, ignoreCase = true)
+        }
+    }
+
     fun parsedAdvanceOffsets(): List<Int> {
         return advanceAlertOffsetsMinutes
             .split(",")
@@ -136,7 +171,7 @@ class RoomTypeConverters {
 
     @TypeConverter
     fun toCategory(value: String): ReminderCategory =
-        runCatching { ReminderCategory.valueOf(value) }.getOrDefault(ReminderCategory.PERSONAL)
+        ReminderCategory.fromLabelOrName(value)
 
     @TypeConverter
     fun fromPriority(value: ReminderPriority): String = value.name

@@ -450,4 +450,74 @@ class ExampleRobolectricTest {
         historyDao.clearAllHistory()
         assertEquals(0, historyDao.getRecentHistorySync().size)
     }
+
+    @Test
+    fun `room task categorization supports Work Personal Urgent presets and custom labels with multi-select filtering`() = runBlocking {
+        val repoWithTags = ReminderRepository(
+            dao = db.reminderDao(),
+            scheduler = scheduler,
+            preferencesRepository = prefs,
+            taskDao = db.taskDao(),
+            categoryTagDao = db.categoryTagDao()
+        )
+        repoWithTags.ensurePresetCategoriesSeeded()
+
+        val initialTags = db.categoryTagDao().getAllTagsSync()
+        assertTrue(initialTags.any { it.name == "Work" && it.isPreset })
+        assertTrue(initialTags.any { it.name == "Personal" && it.isPreset })
+        assertTrue(initialTags.any { it.name == "Urgent" && it.isPreset })
+
+        // Create a custom Room category tag
+        val customTag = repoWithTags.createCustomCategoryTag("Deep Study", "#0284C7")
+        assertNotNull(customTag)
+
+        val allTagsAfterCreate = db.categoryTagDao().getAllTagsSync()
+        assertTrue(allTagsAfterCreate.any { it.name == "Deep Study" && !it.isPreset })
+
+        val now = System.currentTimeMillis()
+        repoWithTags.createOrUpdateReminder(
+            ReminderEntity(
+                title = "Prepare Architecture Deck",
+                localDateStr = "2026-11-12",
+                localTimeStr = "09:00",
+                scheduledEpochMillis = now + 3_600_000L,
+                category = ReminderCategory.WORK
+            )
+        )
+        repoWithTags.createOrUpdateReminder(
+            ReminderEntity(
+                title = "Fix Production Hotfix",
+                localDateStr = "2026-11-12",
+                localTimeStr = "10:00",
+                scheduledEpochMillis = now + 7_200_000L,
+                category = ReminderCategory.URGENT
+            )
+        )
+        repoWithTags.createOrUpdateReminder(
+            ReminderEntity(
+                title = "Read Kotlin Coroutines Chapter",
+                localDateStr = "2026-11-12",
+                localTimeStr = "14:00",
+                scheduledEpochMillis = now + 10_800_000L,
+                category = ReminderCategory.PERSONAL,
+                customCategoryLabel = "Deep Study",
+                colorHex = "#0284C7"
+            )
+        )
+
+        // Query multi-category preset filter from Room DAO
+        val workAndUrgent = db.reminderDao().observeRemindersByCategories(
+            listOf(ReminderCategory.WORK, ReminderCategory.URGENT)
+        ).first()
+        assertEquals(2, workAndUrgent.size)
+
+        // Verify multi-category filter helper matching Work + Deep Study
+        val allReminders = db.reminderDao().getAllRemindersSync()
+        val multiFiltered = allReminders.filter {
+            it.matchesCategoryFilter(setOf("Work", "Deep Study"))
+        }
+        assertEquals(2, multiFiltered.size)
+        assertTrue(multiFiltered.any { it.title == "Prepare Architecture Deck" })
+        assertTrue(multiFiltered.any { it.title == "Read Kotlin Coroutines Chapter" })
+    }
 }

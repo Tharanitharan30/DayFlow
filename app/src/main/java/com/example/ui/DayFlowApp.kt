@@ -289,6 +289,8 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
                         MainTab.HOME -> {
                             DashboardScreen(
                                 reminders = state.reminders,
+                                categoryTags = state.categoryTags,
+                                selectedCategoryLabels = navState.selectedCategoryLabels,
                                 use24Hour = state.settings.use24HourFormat,
                                 diagnostics = state.diagnostics,
                                 onQuickAdd = { title -> viewModel.quickAddReminder(title) },
@@ -297,6 +299,10 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
                                 onToggleComplete = { viewModel.toggleCompleted(it) },
                                 onSnooze = { r, mins -> viewModel.snoozeReminder(r, mins) },
                                 onTogglePauseRecurrence = { viewModel.togglePauseRecurrence(it) },
+                                onToggleCategoryLabel = { viewModel.toggleCategoryLabelFilter(it) },
+                                onClearCategories = { viewModel.clearCategoryFilters() },
+                                onCreateCustomTag = { name, hex -> viewModel.createCustomCategoryTag(name, hex) },
+                                onDeleteCustomTag = { name -> viewModel.deleteCustomCategoryTag(name) },
                                 onOpenDiagnostics = { viewModel.setDiagnosticsSheetOpen(true) },
                                 onClearCompleted = { viewModel.clearCompletedReminders() },
                                 modifier = Modifier.weight(1f)
@@ -324,14 +330,20 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
                         MainTab.TASKS -> {
                             AllTasksScreen(
                                 reminders = state.reminders,
+                                categoryTags = state.categoryTags,
                                 searchQuery = navState.searchQuery,
                                 selectedCategory = navState.selectedCategory,
+                                selectedCategoryLabels = navState.selectedCategoryLabels,
                                 selectedPriority = navState.selectedPriority,
                                 statusFilter = navState.statusFilter,
                                 sortOrder = navState.sortOrder,
                                 use24Hour = state.settings.use24HourFormat,
                                 onSearchQueryChange = { viewModel.updateSearchQuery(it) },
                                 onSelectCategory = { viewModel.selectCategoryFilter(it) },
+                                onToggleCategoryLabel = { viewModel.toggleCategoryLabelFilter(it) },
+                                onClearCategories = { viewModel.clearCategoryFilters() },
+                                onCreateCustomTag = { name, hex -> viewModel.createCustomCategoryTag(name, hex) },
+                                onDeleteCustomTag = { name -> viewModel.deleteCustomCategoryTag(name) },
                                 onSelectPriority = { viewModel.selectPriorityFilter(it) },
                                 onSelectStatusFilter = { viewModel.selectStatusFilter(it) },
                                 onSelectSortOrder = { viewModel.selectSortOrder(it) },
@@ -385,6 +397,9 @@ fun DayFlowApp(viewModel: DayFlowViewModel) {
         ReminderEditorSheet(
             initialReminder = editingReminder,
             use24Hour = state.settings.use24HourFormat,
+            categoryTags = state.categoryTags,
+            onCreateCustomTag = { name, hex -> viewModel.createCustomCategoryTag(name, hex) },
+            onDeleteCustomTag = { name -> viewModel.deleteCustomCategoryTag(name) },
             onDismiss = { viewModel.closeEditor() },
             onSave = { updated, scopeMode -> viewModel.saveReminder(updated, scopeMode) },
             onDelete = { target, entireSeries -> viewModel.deleteReminder(target, entireSeries) }

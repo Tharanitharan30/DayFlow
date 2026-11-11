@@ -22,6 +22,12 @@ class TaskRepository(
     fun observeByCategory(category: ReminderCategory): Flow<List<Task>> =
         taskDao.observeTasksByCategory(category)
 
+    fun observeByCategories(categories: List<ReminderCategory>): Flow<List<Task>> =
+        taskDao.observeTasksByCategories(categories)
+
+    fun observeByCustomLabel(label: String): Flow<List<Task>> =
+        taskDao.observeTasksByCustomLabel(label)
+
     fun observeByPriority(priority: ReminderPriority): Flow<List<Task>> =
         taskDao.observeTasksByPriority(priority)
 
